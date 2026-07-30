@@ -3285,6 +3285,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "tectonic_bridge_grapheme"
+version = "0.0.0-dev.0"
+dependencies = [
+ "cc",
+]
+
+[[package]]
 name = "tectonic_bridge_graphite2"
 version = "0.0.0-dev.0"
 dependencies = [
@@ -3408,6 +3415,7 @@ dependencies = [
  "tectonic_bridge_core",
  "tectonic_bridge_flate",
  "tectonic_bridge_freetype2",
+ "tectonic_bridge_grapheme",
  "tectonic_bridge_graphite2",
  "tectonic_bridge_harfbuzz",
  "tectonic_bridge_icu",

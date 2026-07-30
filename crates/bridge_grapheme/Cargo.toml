@@ -1,0 +1,20 @@
+# Copyright 2026 the Tectonic Project
+# Licensed under the MIT License.
+
+lints.workspace = true
+
+[package]
+name = "tectonic_bridge_grapheme"
+version = "0.0.0-dev.0"
+authors = ["Peter Williams <peter@newton.cx>"]
+description = """
+Expose the subset of libgrapheme used by Tectonic.
+"""
+homepage = "https://tectonic-typesetting.github.io/"
+repository = "https://github.com/tectonic-typesetting/tectonic/"
+license = "MIT"
+edition = "2021"
+links = "grapheme"
+
+[build-dependencies]
+cc = "^1.0.66"

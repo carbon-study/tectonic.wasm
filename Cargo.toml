@@ -39,6 +39,7 @@ members = [
     "crates/bridge_fontconfig",
     "crates/bridge_freetype2",
     "crates/bridge_graphite2",
+    "crates/bridge_grapheme",
     "crates/bridge_harfbuzz",
     "crates/bridge_icu",
     "crates/bridge_png",

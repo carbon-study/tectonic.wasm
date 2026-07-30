@@ -4,3 +4,6 @@
 [submodule "crates/bridge_harfbuzz/harfbuzz"]
 	path = crates/bridge_harfbuzz/harfbuzz
 	url = https://github.com/harfbuzz/harfbuzz.git
+[submodule "crates/bridge_grapheme/libgrapheme"]
+	path = crates/bridge_grapheme/libgrapheme
+	url = https://git.suckless.org/libgrapheme
