@@ -15,8 +15,6 @@ fn main() {
     let xetex_layout_include_path = env::var("DEP_TECTONIC_XETEX_LAYOUT_INCLUDE_PATH").unwrap();
     let core_include_dir = env::var("DEP_TECTONIC_BRIDGE_CORE_INCLUDE").unwrap();
     let flate_include_dir = env::var("DEP_TECTONIC_BRIDGE_FLATE_INCLUDE").unwrap();
-    let graphite2_include_path = env::var("DEP_GRAPHITE2_INCLUDE_PATH").unwrap();
-    let graphite2_static = !env::var("DEP_GRAPHITE2_DEFINE_STATIC").unwrap().is_empty();
     let freetype_include_path = env::var("DEP_FREETYPE2_INCLUDE_PATH").unwrap();
     let harfbuzz_include_path = env::var("DEP_HARFBUZZ_INCLUDE_PATH").unwrap();
     let fontconfig_include_path = env::var("DEP_FONTCONFIG_INCLUDE_PATH");
@@ -85,11 +83,6 @@ fn main() {
         cxx_cfg.include(item);
     }
 
-    for item in graphite2_include_path.split(';') {
-        c_cfg.include(item);
-        cxx_cfg.include(item);
-    }
-
     for item in icu_include_path.split(';') {
         c_cfg.include(item);
         cxx_cfg.include(item);
@@ -102,9 +95,23 @@ fn main() {
         }
     }
 
-    if graphite2_static {
-        c_cfg.define("GRAPHITE2_STATIC", "1");
-        cxx_cfg.define("GRAPHITE2_STATIC", "1");
+    #[allow(unexpected_cfgs)]
+    const GRAPHITE2_ENABLED: bool = cfg!(feature = "graphite2");
+
+    if GRAPHITE2_ENABLED {
+        let graphite2_include_path = env::var("DEP_GRAPHITE2_INCLUDE_PATH").unwrap();
+        let graphite2_static = !env::var("DEP_GRAPHITE2_DEFINE_STATIC").unwrap().is_empty();
+
+        c_cfg.define("TECTONIC_XETEX_ENABLE_GRAPHITE", "1");
+        for item in graphite2_include_path.split(';') {
+            c_cfg.include(item);
+            cxx_cfg.include(item);
+        }
+
+        if graphite2_static {
+            c_cfg.define("GRAPHITE2_STATIC", "1");
+            cxx_cfg.define("GRAPHITE2_STATIC", "1");
+        }
     }
 
     #[allow(unexpected_cfgs)]

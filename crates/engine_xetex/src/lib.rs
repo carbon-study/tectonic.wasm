@@ -251,6 +251,10 @@ pub mod c_api {
 /// Import things from our bridge crates to ensure that we actually link with
 /// them.
 mod linkage {
+    #[cfg(feature = "graphite2")]
+    #[allow(unused_imports)]
+    use tectonic_bridge_graphite2 as clipyrenamehack0;
+
     #[cfg(feature = "image-formats")]
     #[allow(unused_imports)]
     use tectonic_pdf_io as clipyrenamehack1;

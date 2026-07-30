@@ -7,6 +7,8 @@ use tectonic_bridge_fontconfig as fc;
 
 mod engine;
 mod font;
+#[cfg(not(feature = "graphite2"))]
+mod graphite_disabled;
 mod manager;
 
 #[derive(Copy, Clone, PartialEq, Debug)]

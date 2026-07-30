@@ -92,24 +92,26 @@ mod inner {
             std::process::exit(1);
         }
 
-        // Include paths exported by our internal dependencies:
-        let graphite2_include_path = env::var("DEP_GRAPHITE2_INCLUDE_PATH").unwrap();
-        let graphite2_static = !env::var("DEP_GRAPHITE2_DEFINE_STATIC").unwrap().is_empty();
-
         let mut cfg = cc::Build::new();
 
         cfg.cpp(true)
             .flag("-std=c++11")
             .warnings(false)
-            .define("HAVE_GRAPHITE2", "1")
             .file("harfbuzz/src/harfbuzz.cc");
 
-        for item in graphite2_include_path.split(';') {
-            cfg.include(item);
-        }
+        #[cfg(feature = "graphite2")]
+        {
+            // Include paths exported by our internal dependency.
+            let graphite2_include_path = env::var("DEP_GRAPHITE2_INCLUDE_PATH").unwrap();
+            let graphite2_static = !env::var("DEP_GRAPHITE2_DEFINE_STATIC").unwrap().is_empty();
 
-        if graphite2_static {
-            cfg.define("GRAPHITE2_STATIC", "1");
+            cfg.define("HAVE_GRAPHITE2", "1");
+            for item in graphite2_include_path.split(';') {
+                cfg.include(item);
+            }
+            if graphite2_static {
+                cfg.define("GRAPHITE2_STATIC", "1");
+            }
         }
 
         if !target.contains("windows") {
@@ -138,7 +140,8 @@ mod inner {
             include_dir.to_str().expect("non-string-friendly OUT_DIR")
         );
 
-        for item in graphite2_include_path.split(';') {
+        #[cfg(feature = "graphite2")]
+        for item in env::var("DEP_GRAPHITE2_INCLUDE_PATH").unwrap().split(';') {
             print!(";{item}");
         }
 

@@ -6,6 +6,7 @@ use std::borrow::Cow;
 use std::ffi::{CStr, CString};
 use std::ops::{Deref, DerefMut};
 use std::ptr;
+#[cfg(feature = "graphite2")]
 use tectonic_bridge_graphite2 as gr;
 use tectonic_bridge_harfbuzz as hb;
 
@@ -37,6 +38,7 @@ impl<T> DerefMut for MaybeBorrow<'_, T> {
     }
 }
 
+#[cfg(feature = "graphite2")]
 pub(crate) struct GrBreak {
     pub(crate) segment: gr::Segment,
     pub(crate) slot: gr::Slot,
@@ -59,6 +61,7 @@ pub struct LayoutEngine {
     slant: f32,
     embolden: f32,
     hb_buffer: hb::Buffer,
+    #[cfg(feature = "graphite2")]
     pub(crate) gr_breaking: Option<GrBreak>,
 }
 
@@ -100,6 +103,7 @@ impl LayoutEngine {
             slant,
             embolden,
             hb_buffer: hb::Buffer::new(),
+            #[cfg(feature = "graphite2")]
             gr_breaking: None,
         }
     }
@@ -271,6 +275,7 @@ impl LayoutEngine {
     }
 }
 
+#[cfg(feature = "graphite2")]
 pub(crate) fn get_graphite_feature_code(engine: &LayoutEngine, index: u32) -> Option<u32> {
     let id = engine
         .font()
@@ -282,6 +287,7 @@ pub(crate) fn get_graphite_feature_code(engine: &LayoutEngine, index: u32) -> Op
     Some(id)
 }
 
+#[cfg(feature = "graphite2")]
 pub(crate) fn count_graphite_feature_settings(
     engine: &LayoutEngine,
     feature_id: u32,
@@ -296,6 +302,7 @@ pub(crate) fn count_graphite_feature_settings(
     Some(out)
 }
 
+#[cfg(feature = "graphite2")]
 pub(crate) fn get_graphite_feature_setting_code(
     engine: &LayoutEngine,
     feature_id: u32,
@@ -311,6 +318,7 @@ pub(crate) fn get_graphite_feature_setting_code(
     Some(out)
 }
 
+#[cfg(feature = "graphite2")]
 pub(crate) fn get_graphite_feature_default_setting(
     engine: &LayoutEngine,
     feature_id: u32,
@@ -328,6 +336,7 @@ pub(crate) fn get_graphite_feature_default_setting(
     Some(out)
 }
 
+#[cfg(feature = "graphite2")]
 pub(crate) fn get_graphite_feature_label(
     engine: &LayoutEngine,
     feature_id: u32,
@@ -339,6 +348,7 @@ pub(crate) fn get_graphite_feature_label(
     Some(label)
 }
 
+#[cfg(feature = "graphite2")]
 pub(crate) fn get_graphite_feature_setting_label(
     engine: &LayoutEngine,
     feature_id: u32,
@@ -357,6 +367,7 @@ pub(crate) fn get_graphite_feature_setting_label(
     None
 }
 
+#[cfg(feature = "graphite2")]
 pub(crate) fn find_graphite_feature(
     engine: &LayoutEngine,
     str: &[u8],
@@ -395,6 +406,7 @@ pub(crate) fn find_graphite_feature(
     *v != -1
 }
 
+#[cfg(feature = "graphite2")]
 pub(crate) fn find_graphite_feature_named(engine: &LayoutEngine, name: &[u8]) -> Option<u32> {
     let gr_face = engine.font().hb_font().face().gr_face()?;
 
@@ -413,6 +425,7 @@ pub(crate) fn find_graphite_feature_named(engine: &LayoutEngine, name: &[u8]) ->
     None
 }
 
+#[cfg(feature = "graphite2")]
 pub(crate) fn find_graphite_feature_setting_named(
     engine: &LayoutEngine,
     id: u32,

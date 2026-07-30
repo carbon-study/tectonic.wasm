@@ -55,7 +55,9 @@ authorization from the copyright holders.
 #include <unicode/ubrk.h>
 #include <unicode/ucnv.h>
 
+#ifdef TECTONIC_XETEX_ENABLE_GRAPHITE
 #include <graphite2/Font.h>
+#endif
 
 #include "xetex-xetexd.h"
 
@@ -496,6 +498,11 @@ loadOTfont(RawPlatformFontRef fontRef, XeTeXFont font, Fixed scaled_size, char* 
     int i;
 
     char reqEngine = getReqEngine();
+
+#ifndef TECTONIC_XETEX_ENABLE_GRAPHITE
+    if (reqEngine == 'G')
+        _tt_abort("this build of the XeTeX engine does not support Graphite fonts");
+#endif
 
     if (reqEngine == 'O' || reqEngine == 'G') {
         shapers = (char**) xrealloc(shapers, (nShapers + 1) * sizeof(char *));
@@ -1047,7 +1054,9 @@ gr_print_font_name(int32_t what, void* pEngine, int32_t param1, int32_t param2)
 
     if (name != NULL) {
         print_c_string(name);
+#ifdef TECTONIC_XETEX_ENABLE_GRAPHITE
         gr_label_destroy(name);
+#endif
     }
 }
 

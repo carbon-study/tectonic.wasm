@@ -1,8 +1,13 @@
 use crate::c_api::{FloatPoint, GlyphBBox, XeTeXFont, XeTeXLayoutEngine};
-use crate::engine::{find_graphite_feature_named, GrBreak, LayoutEngine, MaybeBorrow};
+#[cfg(feature = "graphite2")]
+use crate::engine::{find_graphite_feature_named, GrBreak};
+use crate::engine::{LayoutEngine, MaybeBorrow};
 use std::borrow::Cow;
 use std::ffi::{CStr, CString};
-use std::{ptr, slice};
+#[cfg(feature = "graphite2")]
+use std::ptr;
+use std::slice;
+#[cfg(feature = "graphite2")]
 use tectonic_bridge_graphite2 as gr;
 use tectonic_bridge_harfbuzz as hb;
 
@@ -359,6 +364,7 @@ pub unsafe extern "C" fn getGlyphPositions(engine: XeTeXLayoutEngine, positions:
     }
 }
 
+#[cfg(feature = "graphite2")]
 #[no_mangle]
 pub unsafe extern "C" fn countGraphiteFeatures(engine: XeTeXLayoutEngine) -> u32 {
     let hb_face = (*engine).font().hb_font().face();
@@ -368,11 +374,13 @@ pub unsafe extern "C" fn countGraphiteFeatures(engine: XeTeXLayoutEngine) -> u32
     }
 }
 
+#[cfg(feature = "graphite2")]
 #[no_mangle]
 pub unsafe extern "C" fn getGraphiteFeatureCode(engine: XeTeXLayoutEngine, index: u32) -> u32 {
     crate::engine::get_graphite_feature_code(&*engine, index).unwrap_or(0)
 }
 
+#[cfg(feature = "graphite2")]
 #[no_mangle]
 pub unsafe extern "C" fn countGraphiteFeatureSettings(
     engine: XeTeXLayoutEngine,
@@ -381,6 +389,7 @@ pub unsafe extern "C" fn countGraphiteFeatureSettings(
     crate::engine::count_graphite_feature_settings(&*engine, feature_id).unwrap_or(0)
 }
 
+#[cfg(feature = "graphite2")]
 #[no_mangle]
 pub unsafe extern "C" fn getGraphiteFeatureSettingCode(
     engine: XeTeXLayoutEngine,
@@ -390,6 +399,7 @@ pub unsafe extern "C" fn getGraphiteFeatureSettingCode(
     crate::engine::get_graphite_feature_setting_code(&*engine, feature_id, index).unwrap_or(0)
 }
 
+#[cfg(feature = "graphite2")]
 #[no_mangle]
 pub unsafe extern "C" fn getGraphiteFeatureDefaultSetting(
     engine: XeTeXLayoutEngine,
@@ -398,6 +408,7 @@ pub unsafe extern "C" fn getGraphiteFeatureDefaultSetting(
     crate::engine::get_graphite_feature_default_setting(&*engine, feature_id).unwrap_or(0)
 }
 
+#[cfg(feature = "graphite2")]
 #[no_mangle]
 pub unsafe extern "C" fn getGraphiteFeatureLabel(
     engine: XeTeXLayoutEngine,
@@ -409,6 +420,7 @@ pub unsafe extern "C" fn getGraphiteFeatureLabel(
     }
 }
 
+#[cfg(feature = "graphite2")]
 #[no_mangle]
 pub unsafe extern "C" fn getGraphiteFeatureSettingLabel(
     engine: XeTeXLayoutEngine,
@@ -421,6 +433,7 @@ pub unsafe extern "C" fn getGraphiteFeatureSettingLabel(
     }
 }
 
+#[cfg(feature = "graphite2")]
 #[no_mangle]
 pub unsafe extern "C" fn findGraphiteFeature(
     engine: XeTeXLayoutEngine,
@@ -434,6 +447,7 @@ pub unsafe extern "C" fn findGraphiteFeature(
     crate::engine::find_graphite_feature(&*engine, str, &mut *f, &mut *v)
 }
 
+#[cfg(feature = "graphite2")]
 #[no_mangle]
 pub unsafe extern "C" fn findGraphiteFeatureNamed(
     engine: XeTeXLayoutEngine,
@@ -450,6 +464,7 @@ pub unsafe extern "C" fn findGraphiteFeatureNamed(
         .unwrap_or(-1)
 }
 
+#[cfg(feature = "graphite2")]
 #[no_mangle]
 pub unsafe extern "C" fn findGraphiteFeatureSettingNamed(
     engine: XeTeXLayoutEngine,
@@ -468,6 +483,7 @@ pub unsafe extern "C" fn findGraphiteFeatureSettingNamed(
         .unwrap_or(-1)
 }
 
+#[cfg(feature = "graphite2")]
 #[no_mangle]
 pub unsafe extern "C" fn initGraphiteBreaking(
     engine: XeTeXLayoutEngine,
@@ -523,6 +539,7 @@ pub unsafe extern "C" fn initGraphiteBreaking(
     true
 }
 
+#[cfg(feature = "graphite2")]
 #[no_mangle]
 pub unsafe extern "C" fn findNextGraphiteBreak(engine: XeTeXLayoutEngine) -> libc::c_int {
     let engine = &mut *engine;

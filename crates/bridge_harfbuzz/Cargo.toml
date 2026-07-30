@@ -23,7 +23,7 @@ exclude = ["/harfbuzz/docs/", "/harfbuzz/perf/", "/harfbuzz/test/"]
 
 [dependencies]
 tectonic_bridge_freetype2 = { path = "../bridge_freetype2", version = "0.0.0-dev.0" }
-tectonic_bridge_graphite2 = { path = "../bridge_graphite2", version = "0.0.0-dev.0" }
+tectonic_bridge_graphite2 = { path = "../bridge_graphite2", version = "0.0.0-dev.0", optional = true }
 libc = "0.2"
 
 [build-dependencies]
@@ -35,6 +35,8 @@ tectonic_cfg_support = { path = "../cfg_support", version = "0.0.0-dev.0" }
 tectonic_mac_core = { path = "../mac_core", version = "0.0.0-dev.0" }
 
 [features]
+default = ["graphite2"]
+graphite2 = ["dep:tectonic_bridge_graphite2"]
 external-harfbuzz = []
 
 [package.metadata.internal_dep_versions]

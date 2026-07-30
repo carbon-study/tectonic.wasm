@@ -9,6 +9,7 @@ use std::marker::PhantomData;
 use std::ops::Deref;
 use std::ptr::NonNull;
 use std::{ptr, slice};
+#[cfg(feature = "graphite2")]
 use tectonic_bridge_graphite2 as gr;
 
 mod font_funcs;
@@ -397,7 +398,8 @@ impl<'a> FaceRef<'a> {
         ot::Layout(self)
     }
 
-    /// Get the graphite2 face for this font
+    /// Get the graphite2 face for this font.
+    #[cfg(feature = "graphite2")]
     pub fn gr_face(self) -> Option<gr::FaceRef<'a>> {
         // SAFETY: Internal pointer guaranteed valid
         let ptr = unsafe { sys::hb_graphite2_face_get_gr_face(self.as_ptr()) };
