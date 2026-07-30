@@ -6,7 +6,8 @@
 //! existing work done in the other freetype-sys crates, preferably just using
 //! them directly instead of duplicating effort.
 
-use tectonic_dep_support::{Configuration, Dependency, Spec};
+use std::env;
+use tectonic_dep_support::{Configuration, Dependency, EmscriptenPort, Spec};
 
 struct Freetype2Spec;
 
@@ -20,7 +21,18 @@ impl Spec for Freetype2Spec {
     }
 }
 
-fn main() {
+fn build_emscripten_port() {
+    EmscriptenPort::probe(
+        "USE_FREETYPE",
+        "libfreetype-legacysjlj.a",
+        "include/freetype2",
+        "ft2build.h",
+        "freetype-legacysjlj",
+    )
+    .emit();
+}
+
+fn build_external() {
     let cfg = Configuration::default();
     let dep = Dependency::probe(Freetype2Spec, &cfg);
 
@@ -38,4 +50,12 @@ fn main() {
     println!();
 
     dep.emit();
+}
+
+fn main() {
+    if env::var("TARGET").unwrap().ends_with("-emscripten") {
+        build_emscripten_port();
+    } else {
+        build_external();
+    }
 }

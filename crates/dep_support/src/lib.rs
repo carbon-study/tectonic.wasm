@@ -8,7 +8,9 @@
 
 use std::{
     env,
+    ffi::OsStr,
     path::{Path, PathBuf},
+    process::Command,
 };
 
 /// Supported depedency-finding backends.
@@ -67,6 +69,105 @@ pub trait Spec {
     /// Get the vcpkg packages used to check for this dependency. These will be
     /// passed into `vcpkg::Config::find_package()`.
     fn get_vcpkg_spec(&self) -> &[&str];
+}
+
+/// An Emscripten port resolved through `emcc`.
+///
+/// Emscripten's generated pkg-config files expose settings such as
+/// `-sUSE_FREETYPE` rather than conventional include and library paths. Those
+/// settings are not understood by Cargo's pkg-config integration, so bridge
+/// crates use this type to translate an installed port into Cargo metadata.
+pub struct EmscriptenPort {
+    include_path: PathBuf,
+    library_path: PathBuf,
+    link_name: String,
+}
+
+impl EmscriptenPort {
+    /// Resolve an installed Emscripten port.
+    pub fn probe(
+        setting: &str,
+        archive_name: &str,
+        include_subdir: &str,
+        header_marker: &str,
+        embuilder_target: &str,
+    ) -> Self {
+        println!("cargo:rerun-if-env-changed=EMCC");
+        println!("cargo:rerun-if-env-changed=EM_CACHE");
+
+        let emcc = env::var_os("EMCC").unwrap_or_else(|| OsStr::new("emcc").to_owned());
+        let setting_arg = format!("-s{setting}=1");
+        let archive_arg = format!("--print-file-name={archive_name}");
+        let output = Command::new(emcc)
+            .args(["-fwasm-exceptions", &setting_arg, &archive_arg])
+            .output()
+            .unwrap_or_else(|err| {
+                panic!("failed to run emcc while locating {archive_name}: {err}")
+            });
+
+        if !output.status.success() {
+            panic!(
+                "emcc failed while locating {archive_name}:\n{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+
+        let archive_path = PathBuf::from(
+            String::from_utf8(output.stdout)
+                .expect("emcc returned a non-UTF-8 archive path")
+                .trim(),
+        );
+
+        if !archive_path.is_absolute() || !archive_path.is_file() {
+            panic!(
+                "Emscripten port archive {archive_name} is not installed at {}; \
+                 run `embuilder build {embuilder_target}` with the same EM_CACHE",
+                archive_path.display()
+            );
+        }
+
+        let library_path = archive_path
+            .parent()
+            .expect("Emscripten port archive has no parent directory")
+            .to_owned();
+        let sysroot = library_path
+            .parent()
+            .and_then(|path| path.parent())
+            .expect("Emscripten port archive is not inside a sysroot");
+        let include_path = sysroot.join(include_subdir);
+
+        if !include_path.join(header_marker).is_file() {
+            panic!(
+                "Emscripten port header {} is not installed; \
+                 run `embuilder build {embuilder_target}` with the same EM_CACHE",
+                include_path.join(header_marker).display()
+            );
+        }
+
+        let link_name = archive_name
+            .strip_prefix("lib")
+            .and_then(|name| name.strip_suffix(".a"))
+            .unwrap_or_else(|| {
+                panic!("Emscripten port archive is not named lib*.a: {archive_name}")
+            })
+            .to_owned();
+
+        EmscriptenPort {
+            include_path,
+            library_path,
+            link_name,
+        }
+    }
+
+    /// Emit include and static-link metadata for Cargo.
+    pub fn emit(&self) {
+        println!("cargo:include-path={}", self.include_path.display());
+        println!(
+            "cargo:rustc-link-search=native={}",
+            self.library_path.display()
+        );
+        println!("cargo:rustc-link-lib=static={}", self.link_name);
+    }
 }
 
 /// Build-script state when using pkg-config as the backend.

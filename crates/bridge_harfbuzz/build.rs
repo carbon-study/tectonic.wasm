@@ -7,7 +7,7 @@
 mod inner {
     use std::env;
     use tectonic_cfg_support::target_cfg;
-    use tectonic_dep_support::{Configuration, Dependency, Spec};
+    use tectonic_dep_support::{Configuration, Dependency, EmscriptenPort, Spec};
 
     struct HarfbuzzSpec;
 
@@ -31,7 +31,18 @@ mod inner {
         }
     }
 
-    pub fn build_harfbuzz() {
+    fn build_emscripten_port() {
+        EmscriptenPort::probe(
+            "USE_HARFBUZZ",
+            "libharfbuzz.a",
+            "include",
+            "harfbuzz/hb.h",
+            "harfbuzz",
+        )
+        .emit();
+    }
+
+    fn build_external() {
         let cfg = Configuration::default();
         let dep = Dependency::probe(HarfbuzzSpec, &cfg);
 
@@ -59,6 +70,14 @@ mod inner {
         println!();
 
         dep.emit();
+    }
+
+    pub fn build_harfbuzz() {
+        if env::var("TARGET").unwrap().ends_with("-emscripten") {
+            build_emscripten_port();
+        } else {
+            build_external();
+        }
     }
 }
 
