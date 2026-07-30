@@ -45,6 +45,11 @@ fn main() {
 
     cxx_cfg.cpp(true);
 
+    if target.ends_with("-emscripten") {
+        c_cfg.flag("-sSUPPORT_LONGJMP=wasm");
+        cxx_cfg.flag("-sSUPPORT_LONGJMP=wasm");
+    }
+
     for flag in C_FLAGS {
         c_cfg.flag_if_supported(flag);
     }

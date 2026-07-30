@@ -15,8 +15,13 @@ fn main() {
     build
         .warnings(true)
         .file("support/support.c")
-        .include(&main_header_src)
-        .compile("libtectonic_bridge_core.a");
+        .include(&main_header_src);
+
+    if env::var("TARGET").unwrap().ends_with("-emscripten") {
+        build.flag("-sSUPPORT_LONGJMP=wasm");
+    }
+
+    build.compile("libtectonic_bridge_core.a");
 
     println!("cargo:rerun-if-changed=support/support.c");
     println!("cargo:rerun-if-changed=support/tectonic_bridge_core.h");
