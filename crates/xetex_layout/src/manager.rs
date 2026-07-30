@@ -2,24 +2,30 @@
 
 use crate::c_api::{Fixed, PlatformFontRef};
 use crate::font::Font;
-use crate::utils::{d_to_fix, fix_to_d};
+use crate::utils::d_to_fix;
+#[cfg(not(target_family = "wasm"))]
+use crate::utils::fix_to_d;
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::ffi::{CStr, CString};
+#[cfg(not(target_family = "wasm"))]
 use tectonic_bridge_freetype2 as ft;
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_family = "wasm")))]
 mod fc;
 #[cfg(target_os = "macos")]
 mod mac;
+#[cfg(target_family = "wasm")]
+pub(crate) mod wasm;
 
 thread_local! {
     static FONT_MGR: RefCell<Option<FontManager>> = const { RefCell::new(None) };
 }
 
 #[derive(Default)]
+#[cfg_attr(target_family = "wasm", allow(dead_code))]
 pub(crate) struct OpSizeRec {
     design_size: f64,
     min_size: f64,
@@ -90,7 +96,7 @@ impl FamilyInfo {
     }
 }
 
-#[derive(Default)]
+#[derive(Clone, Debug, Default)]
 struct NameCollection {
     family_names: Vec<CString>,
     style_names: Vec<CString>,
@@ -105,6 +111,7 @@ trait FontManagerBackend {
     fn read_names(&self, font: PlatformFontRef) -> NameCollection;
 }
 
+#[cfg(not(target_family = "wasm"))]
 fn base_get_op_size_rec_and_style_flags(font: &mut FontInfo) {
     let xfont = match Font::new(font.font_ref.clone(), 10.0) {
         Ok(xfont) => xfont,
@@ -317,19 +324,29 @@ impl FontManager {
         {
             backend = Box::new(mac::MacBackend::new());
         }
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(not(any(target_os = "macos", target_family = "wasm")))]
         {
             backend = Box::new(fc::FcBackend::new());
         }
+        #[cfg(target_family = "wasm")]
+        {
+            backend = Box::new(wasm::WasmBackend);
+        }
 
-        FONT_MGR.with_borrow_mut(|mgr| {
-            *mgr = Some(FontManager {
-                backend,
-                maps: Default::default(),
-                req_engine: Engine::Default,
-                loaded_font_design_size: 0,
-            })
-        });
+        #[cfg_attr(not(target_family = "wasm"), allow(unused_mut))]
+        let mut manager = FontManager {
+            backend,
+            maps: Default::default(),
+            req_engine: Engine::Default,
+            loaded_font_design_size: 0,
+        };
+
+        #[cfg(target_family = "wasm")]
+        for font in wasm::registered_fonts() {
+            manager.add_platform_font(font);
+        }
+
+        FONT_MGR.with_borrow_mut(|mgr| *mgr = Some(manager));
     }
 
     /// Access the global font manager. Initialize it if necessary.
@@ -346,6 +363,27 @@ impl FontManager {
         FONT_MGR.with_borrow_mut(|mgr| {
             *mgr = None;
         })
+    }
+
+    #[cfg(target_family = "wasm")]
+    fn add_platform_font(&mut self, font: PlatformFontRef) {
+        let names = self.backend.read_names(font.clone());
+        self.maps.add_to_maps(&*self.backend, font, &names);
+    }
+
+    #[cfg(target_family = "wasm")]
+    pub(crate) fn register_wasm_font(
+        registration: FontRegistration,
+    ) -> Result<(), std::ffi::NulError> {
+        let font = wasm::register_font(registration)?;
+        Self::with_font_manager(|manager| manager.add_platform_font(font));
+        Ok(())
+    }
+
+    #[cfg(target_family = "wasm")]
+    pub(crate) fn clear_wasm_fonts() {
+        wasm::clear_registered_fonts();
+        Self::destroy();
     }
 
     /// Get the font for a given name, variant, and point size
@@ -772,12 +810,14 @@ impl FontManager {
         best_match
     }
 
+    #[cfg(not(target_family = "wasm"))]
     fn append_to_list<T: Into<CString> + AsRef<CStr>>(list: &mut Vec<CString>, str: T) {
         if !list.iter().any(|s| **s == *str.as_ref()) {
             list.push(str.into())
         }
     }
 
+    #[cfg(not(target_family = "wasm"))]
     #[cfg_attr(target_os = "macos", allow(unused))]
     fn prepend_to_list<T: Into<CString> + AsRef<CStr>>(list: &mut Vec<CString>, str: T) {
         *list = list.drain(..).filter(|s| **s != *str.as_ref()).collect();
@@ -832,4 +872,49 @@ impl FontManager {
     pub fn set_req_engine(&mut self, engine: Engine) {
         self.req_engine = engine;
     }
+}
+
+/// Metadata describing a font made available to a WebAssembly build.
+///
+/// The strings should match the font's OpenType `name` table. Supplying all
+/// localized names preserves XeTeX's normal full-name and family/style lookup.
+#[cfg(target_family = "wasm")]
+#[derive(Clone, Debug)]
+pub struct FontRegistration {
+    /// Virtual `IoProvider` path containing the font bytes.
+    pub filename: String,
+
+    /// Face index for a TrueType or OpenType collection.
+    pub index: u32,
+
+    /// PostScript name of the face.
+    pub postscript_name: String,
+
+    /// Family names, with the preferred name first.
+    pub family_names: Vec<String>,
+
+    /// Style names, with the preferred name first.
+    pub style_names: Vec<String>,
+
+    /// Full face names, with the preferred name first.
+    pub full_names: Vec<String>,
+
+    /// OpenType OS/2 weight class, such as 400 for regular or 700 for bold.
+    pub weight: u16,
+
+    /// OpenType OS/2 width class, from 1 (ultra-condensed) to 9
+    /// (ultra-expanded).
+    pub width: u16,
+
+    /// Italic slant represented as `tan(-italic_angle) * 1000`.
+    pub slant: i16,
+
+    /// Whether the OpenType metadata marks this as a regular face.
+    pub is_regular: bool,
+
+    /// Whether the OpenType metadata marks this as a bold face.
+    pub is_bold: bool,
+
+    /// Whether the OpenType metadata marks this as an italic face.
+    pub is_italic: bool,
 }

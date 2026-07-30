@@ -43,10 +43,16 @@ pub unsafe extern "C" fn findFontByName(
             .map(tectonic_mac_core::CTFontDescriptor::into_type_ref)
             .unwrap_or(ptr::null_mut())
     });
-    #[cfg(not(target_os = "macos"))]
-    FontManager::with_font_manager(|mgr| {
+    #[cfg(not(any(target_os = "macos", target_family = "wasm")))]
+    return FontManager::with_font_manager(|mgr| {
         mgr.find_font(name, var, size)
             .map(|pat| pat.as_ref().as_ptr())
+            .unwrap_or(ptr::null_mut())
+    });
+    #[cfg(target_family = "wasm")]
+    FontManager::with_font_manager(|mgr| {
+        mgr.find_font(name, var, size)
+            .map(|font| std::sync::Arc::as_ptr(&font).cast_mut().cast())
             .unwrap_or(ptr::null_mut())
     })
 }
