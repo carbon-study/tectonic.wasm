@@ -48,13 +48,55 @@ fn build_table(source: &Path, out_dir: &Path, name: &str) {
 }
 
 fn stage_source(source: &Path, out_dir: &Path, name: &str) -> PathBuf {
-    let upstream_source = fs::read_to_string(source.join(format!("src/{name}.c")))
+    let mut upstream_source = fs::read_to_string(source.join(format!("src/{name}.c")))
         .expect("failed to read libgrapheme source")
         .replace(
             &format!("#include \"../gen/{name}.h\""),
             &format!("#include \"{name}.h\""),
         )
         .replace("#include \"../grapheme.h\"", "#include \"grapheme.h\"");
+
+    if name == "bidirectional" {
+        upstream_source.push_str(
+            r#"
+
+int tectonic_grapheme_bidi_resolve_direction(
+	const uint_least32_t *, size_t, int);
+
+int
+tectonic_grapheme_bidi_resolve_direction(const uint_least32_t *src,
+                                         size_t srclen, int fallback)
+{
+	size_t i;
+	int_least8_t isolate_level = 0;
+
+	for (i = 0; i < srclen; i++) {
+		enum bidi_property prop = get_bidi_property(src[i]);
+
+		if ((prop == BIDI_PROP_LRI || prop == BIDI_PROP_RLI ||
+		     prop == BIDI_PROP_FSI) &&
+		    isolate_level < MAX_DEPTH) {
+			isolate_level++;
+		} else if (prop == BIDI_PROP_PDI && isolate_level > 0) {
+			isolate_level--;
+		}
+
+		if (isolate_level > 0) {
+			continue;
+		}
+		if (prop == BIDI_PROP_L) {
+			return GRAPHEME_BIDIRECTIONAL_DIRECTION_LTR;
+		} else if (prop == BIDI_PROP_AL || prop == BIDI_PROP_R) {
+			return GRAPHEME_BIDIRECTIONAL_DIRECTION_RTL;
+		}
+	}
+
+	return fallback;
+}
+"#,
+        );
+    }
+
     let staged_source = out_dir.join(format!("{name}.c"));
     fs::write(&staged_source, upstream_source).expect("failed to stage libgrapheme source");
     staged_source
@@ -63,6 +105,9 @@ fn stage_source(source: &Path, out_dir: &Path, name: &str) -> PathBuf {
 fn main() {
     let source = PathBuf::from("libgrapheme");
     let out_dir = PathBuf::from(env::var_os("OUT_DIR").unwrap());
+    let include_dir = source
+        .canonicalize()
+        .expect("failed to resolve libgrapheme include directory");
 
     build_table(&source, &out_dir, "line");
     build_table(&source, &out_dir, "bidirectional");
@@ -89,5 +134,6 @@ fn main() {
         .file(source.join("src/util.c"))
         .compile("grapheme");
 
+    println!("cargo:include_path={}", include_dir.display());
     println!("cargo:rerun-if-changed=libgrapheme");
 }

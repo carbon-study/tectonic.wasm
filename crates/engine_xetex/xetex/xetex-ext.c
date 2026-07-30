@@ -51,9 +51,15 @@ authorization from the copyright holders.
 #include <sys/time.h>
 #endif
 
+#ifdef TECTONIC_XETEX_ENABLE_ICU
 #include <unicode/ubidi.h>
 #include <unicode/ubrk.h>
 #include <unicode/ucnv.h>
+#endif
+
+#ifdef TECTONIC_XETEX_ENABLE_GRAPHEME
+#include "xetex-unicode.h"
+#endif
 
 #ifdef TECTONIC_XETEX_ENABLE_GRAPHITE
 #include <graphite2/Font.h>
@@ -67,22 +73,129 @@ authorization from the copyright holders.
 #define kGPOS HB_TAG('G','P','O','S')
 
 
+#ifdef TECTONIC_XETEX_ENABLE_ICU
 static UBreakIterator* brkIter = NULL;
 static int brkLocaleStrNum = 0;
+#endif
+
+#ifdef TECTONIC_XETEX_ENABLE_GRAPHEME
+typedef tt_grapheme_bidi TTBiDi;
+typedef int32_t TTBiDiDirection;
+static bool grapheme_linebreak_active = false;
+#define TT_UBIDI_LTR TT_BIDI_LTR
+#define TT_UBIDI_RTL TT_BIDI_RTL
+#define TT_UBIDI_MIXED TT_BIDI_MIXED
+
+static TTBiDi *
+tt_bidi_open(const uint16_t *text, int32_t length, int32_t direction)
+{
+    return tt_grapheme_bidi_open(text, length, direction);
+}
+
+static TTBiDiDirection
+tt_bidi_get_direction(const TTBiDi *bidi)
+{
+    return tt_grapheme_bidi_direction(bidi);
+}
+
+static int32_t
+tt_bidi_count_runs(const TTBiDi *bidi)
+{
+    return tt_grapheme_bidi_count_runs(bidi);
+}
+
+static TTBiDiDirection
+tt_bidi_get_visual_run(
+    const TTBiDi *bidi,
+    int32_t run_index,
+    int32_t *logical_start,
+    int32_t *length
+)
+{
+    return tt_grapheme_bidi_get_visual_run(
+        bidi, run_index, logical_start, length
+    );
+}
+
+static void
+tt_bidi_close(TTBiDi *bidi)
+{
+    tt_grapheme_bidi_close(bidi);
+}
+#elif defined(TECTONIC_XETEX_ENABLE_ICU)
+typedef UBiDi TTBiDi;
+typedef UBiDiDirection TTBiDiDirection;
+#define TT_UBIDI_LTR UBIDI_LTR
+#define TT_UBIDI_RTL UBIDI_RTL
+#define TT_UBIDI_MIXED UBIDI_MIXED
+
+static TTBiDi *
+tt_bidi_open(const uint16_t *text, int32_t length, int32_t direction)
+{
+    UErrorCode error_code = U_ZERO_ERROR;
+    TTBiDi *bidi = ubidi_open();
+    ubidi_setPara(bidi, (const UChar *) text, length, direction, NULL, &error_code);
+    return bidi;
+}
+
+static TTBiDiDirection
+tt_bidi_get_direction(const TTBiDi *bidi)
+{
+    return ubidi_getDirection(bidi);
+}
+
+static int32_t
+tt_bidi_count_runs(TTBiDi *bidi)
+{
+    UErrorCode error_code = U_ZERO_ERROR;
+    return ubidi_countRuns(bidi, &error_code);
+}
+
+static TTBiDiDirection
+tt_bidi_get_visual_run(
+    TTBiDi *bidi,
+    int32_t run_index,
+    int32_t *logical_start,
+    int32_t *length
+)
+{
+    return ubidi_getVisualRun(bidi, run_index, logical_start, length);
+}
+
+static void
+tt_bidi_close(TTBiDi *bidi)
+{
+    ubidi_close(bidi);
+}
+#else
+#error "XeTeX requires either ICU or libgrapheme Unicode support"
+#endif
 
 void
 linebreak_start(int f, int32_t localeStrNum, uint16_t* text, int32_t textLength)
 {
+#ifdef TECTONIC_XETEX_ENABLE_ICU
     UErrorCode status = U_ZERO_ERROR;
+#endif
     char* locale = (char*)gettexstring(localeStrNum);
 
     if (font_area[f] == OTGR_FONT_FLAG && streq_ptr(locale, "G")) {
         XeTeXLayoutEngine engine = (XeTeXLayoutEngine) font_layout_engine[f];
-        if (initGraphiteBreaking(engine, text, textLength))
+        if (initGraphiteBreaking(engine, text, textLength)) {
+#ifdef TECTONIC_XETEX_ENABLE_GRAPHEME
+            grapheme_linebreak_active = false;
+#endif
             /* user asked for Graphite line breaking and the font supports it */
+            free(locale);
             return;
+        }
     }
 
+#ifdef TECTONIC_XETEX_ENABLE_GRAPHEME
+    free(locale);
+    tt_grapheme_linebreak_start(text, textLength);
+    grapheme_linebreak_active = true;
+#else
     if ((localeStrNum != brkLocaleStrNum) && (brkIter != NULL)) {
         ubrk_close(brkIter);
         brkIter = NULL;
@@ -112,17 +225,27 @@ linebreak_start(int f, int32_t localeStrNum, uint16_t* text, int32_t textLength)
         _tt_abort ("failed to create linebreak iterator, status=%d", (int) status);
 
     ubrk_setText(brkIter, (UChar*) text, textLength, &status);
+#endif
 }
 
 int
 linebreak_next(int f)
 {
+#ifdef TECTONIC_XETEX_ENABLE_GRAPHEME
+    if (grapheme_linebreak_active) {
+        return tt_grapheme_linebreak_next();
+    } else {
+        XeTeXLayoutEngine engine = (XeTeXLayoutEngine) font_layout_engine[f];
+        return findNextGraphiteBreak(engine);
+    }
+#else
     if (brkIter != NULL)
         return ubrk_next((UBreakIterator*)brkIter);
     else {
     	XeTeXLayoutEngine engine = (XeTeXLayoutEngine) font_layout_engine[f];
         return findNextGraphiteBreak(engine);
 	}
+#endif
 }
 
 int
@@ -130,10 +253,12 @@ get_encoding_mode_and_info(int32_t* info)
 {
     /* \XeTeXinputencoding "enc-name"
      *   -> name is packed in |nameoffile| as a C string, starting at [1]
-     * Check if it's a built-in name; if not, try to open an ICU converter by that name
+     * Check if it is a built-in name; if not, try the platform's named decoder.
      */
+#ifdef TECTONIC_XETEX_ENABLE_ICU
     UErrorCode err = U_ZERO_ERROR;
     UConverter* cnv;
+#endif
     *info = 0;
     if (strcasecmp(name_of_file, "auto") == 0) {
         return AUTO;
@@ -154,7 +279,8 @@ get_encoding_mode_and_info(int32_t* info)
         return RAW;
     }
 
-    /* try for an ICU converter */
+    /* Try the platform's named-encoding converter. */
+#ifdef TECTONIC_XETEX_ENABLE_ICU
     cnv = ucnv_open(name_of_file, &err);
     if (cnv == NULL) {
         begin_diagnostic();
@@ -169,6 +295,20 @@ get_encoding_mode_and_info(int32_t* info)
         *info = maketexstring(name_of_file);
         return ICUMAPPING;
     }
+#else
+    if (tt_xetex_browser_decoder_available(name_of_file)) {
+        *info = maketexstring(name_of_file);
+        return ICUMAPPING;
+    }
+
+    begin_diagnostic();
+    print_nl('U');
+    print_c_string("nknown encoding `");
+    print_c_string(name_of_file);
+    print_c_string("'; reading as raw bytes");
+    end_diagnostic(1);
+    return RAW;
+#endif
 }
 
 void
@@ -1593,30 +1733,27 @@ measure_native_node(void* pNode, int use_glyph_metrics)
 
         /* need to find direction runs within the text, and call layoutChars separately for each */
 
-        UBiDiDirection dir;
+        TTBiDiDirection dir;
         void* glyph_info = 0;
         static FloatPoint* positions = 0;
         static float* advances = 0;
         static uint32_t* glyphs = 0;
 
-        UBiDi* pBiDi = ubidi_open();
+        TTBiDi* pBiDi = tt_bidi_open(txtPtr, txtLen, getDefaultDirection(engine));
 
-        UErrorCode errorCode = U_ZERO_ERROR;
-        ubidi_setPara(pBiDi, (const UChar*) txtPtr, txtLen, getDefaultDirection(engine), NULL, &errorCode);
-
-        dir = ubidi_getDirection(pBiDi);
-        if (dir == UBIDI_MIXED) {
+        dir = tt_bidi_get_direction(pBiDi);
+        if (dir == TT_UBIDI_MIXED) {
             /* we actually do the layout twice here, once to count glyphs and then again to get them;
                which is inefficient, but i figure that MIXED is a relatively rare occurrence, so i can't be
                bothered to deal with the memory reallocation headache of doing it differently
             */
-            int nRuns = ubidi_countRuns(pBiDi, &errorCode);
+            int nRuns = tt_bidi_count_runs(pBiDi);
             double width = 0;
             int i, runIndex;
             int32_t logicalStart, length;
             for (runIndex = 0; runIndex < nRuns; ++runIndex) {
-                dir = ubidi_getVisualRun(pBiDi, runIndex, &logicalStart, &length);
-                totalGlyphCount += layoutChars(engine, txtPtr, logicalStart, length, txtLen, (dir == UBIDI_RTL));
+                dir = tt_bidi_get_visual_run(pBiDi, runIndex, &logicalStart, &length);
+                totalGlyphCount += layoutChars(engine, txtPtr, logicalStart, length, txtLen, (dir == TT_UBIDI_RTL));
             }
 
             if (totalGlyphCount > 0) {
@@ -1630,9 +1767,9 @@ measure_native_node(void* pNode, int use_glyph_metrics)
                 x = y = 0.0;
                 for (runIndex = 0; runIndex < nRuns; ++runIndex) {
                     int nGlyphs;
-                    dir = ubidi_getVisualRun(pBiDi, runIndex, &logicalStart, &length);
+                    dir = tt_bidi_get_visual_run(pBiDi, runIndex, &logicalStart, &length);
                     nGlyphs = layoutChars(engine, txtPtr, logicalStart, length, txtLen,
-                                            (dir == UBIDI_RTL));
+                                            (dir == TT_UBIDI_RTL));
 
                     glyphs = xcalloc(nGlyphs, sizeof(uint32_t));
                     positions = xcalloc(nGlyphs + 1, sizeof(FloatPoint));
@@ -1664,7 +1801,7 @@ measure_native_node(void* pNode, int use_glyph_metrics)
             native_glyph_info_ptr(node) = glyph_info;
         } else {
             double width = 0;
-            totalGlyphCount = layoutChars(engine, txtPtr, 0, txtLen, txtLen, (dir == UBIDI_RTL));
+            totalGlyphCount = layoutChars(engine, txtPtr, 0, txtLen, txtLen, (dir == TT_UBIDI_RTL));
 
             glyphs = xcalloc(totalGlyphCount, sizeof(uint32_t));
             positions = xcalloc(totalGlyphCount + 1, sizeof(FloatPoint));
@@ -1698,7 +1835,7 @@ measure_native_node(void* pNode, int use_glyph_metrics)
             free(advances);
         }
 
-        ubidi_close(pBiDi);
+        tt_bidi_close(pBiDi);
 
 
         if (font_letter_space[f] != 0) {

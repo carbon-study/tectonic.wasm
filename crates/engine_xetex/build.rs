@@ -18,7 +18,12 @@ fn main() {
     let freetype_include_path = env::var("DEP_FREETYPE2_INCLUDE_PATH").unwrap();
     let harfbuzz_include_path = env::var("DEP_HARFBUZZ_INCLUDE_PATH").unwrap();
     let fontconfig_include_path = env::var("DEP_FONTCONFIG_INCLUDE_PATH");
-    let icu_include_path = env::var("DEP_ICUUC_INCLUDE_PATH").unwrap();
+    let icu_include_path = env::var("DEP_ICUUC_INCLUDE_PATH");
+    let grapheme_include_path = env::var("DEP_GRAPHEME_INCLUDE_PATH");
+
+    if icu_include_path.is_err() && grapheme_include_path.is_err() {
+        panic!("either the `icu` or `libgrapheme` feature must be enabled");
+    }
 
     // If we want to profile, the default assumption is that we must force the
     // compiler to include frame pointers. We whitelist platforms that are
@@ -88,9 +93,21 @@ fn main() {
         cxx_cfg.include(item);
     }
 
-    for item in icu_include_path.split(';') {
-        c_cfg.include(item);
-        cxx_cfg.include(item);
+    if let Ok(icu_includes) = icu_include_path {
+        c_cfg.define("TECTONIC_XETEX_ENABLE_ICU", "1");
+        for item in icu_includes.split(';') {
+            c_cfg.include(item);
+            cxx_cfg.include(item);
+        }
+    }
+
+    if let Ok(grapheme_includes) = grapheme_include_path {
+        c_cfg.define("TECTONIC_XETEX_ENABLE_GRAPHEME", "1");
+        for item in grapheme_includes.split(';') {
+            c_cfg.include(item);
+            cxx_cfg.include(item);
+        }
+        c_cfg.file("xetex/xetex-unicode.c");
     }
 
     if let Ok(fc_includes) = fontconfig_include_path {

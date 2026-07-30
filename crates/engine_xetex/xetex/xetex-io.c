@@ -9,7 +9,13 @@
 #include "xetex-xetexd.h"
 
 #include <stdio.h>
+#ifdef TECTONIC_XETEX_ENABLE_ICU
 #include <unicode/ucnv.h>
+#elif defined(TECTONIC_XETEX_ENABLE_GRAPHEME)
+#include "xetex-unicode.h"
+#else
+#error "XeTeX requires either ICU or libgrapheme Unicode support"
+#endif
 
 char *name_of_input_file = NULL;
 
@@ -86,8 +92,13 @@ firstByteMark[7] = {
 void
 set_input_file_encoding(UFILE* f, int32_t mode, int32_t encodingData)
 {
-    if ((f->encodingMode == ICUMAPPING) && (f->conversionData != NULL))
+    if ((f->encodingMode == ICUMAPPING) && (f->conversionData != NULL)) {
+#ifdef TECTONIC_XETEX_ENABLE_ICU
         ucnv_close((UConverter*)(f->conversionData));
+#else
+        free(f->conversionData);
+#endif
+    }
     f->conversionData = 0;
 
     switch (mode) {
@@ -101,6 +112,7 @@ set_input_file_encoding(UFILE* f, int32_t mode, int32_t encodingData)
         case ICUMAPPING:
             {
                 char* name = gettexstring(encodingData);
+#ifdef TECTONIC_XETEX_ENABLE_ICU
                 UErrorCode err = U_ZERO_ERROR;
                 UConverter* cnv = ucnv_open(name, &err);
                 if (cnv == NULL) {
@@ -117,6 +129,20 @@ set_input_file_encoding(UFILE* f, int32_t mode, int32_t encodingData)
                     f->encodingMode = ICUMAPPING;
                     f->conversionData = cnv;
                 }
+#else
+                if (!tt_xetex_browser_decoder_available(name)) {
+                    begin_diagnostic();
+                    print_nl('E');
+                    print_c_string("rror creating browser Unicode converter for `");
+                    print_c_string(name);
+                    print_c_string("'; reading as raw bytes");
+                    end_diagnostic(1);
+                    f->encodingMode = RAW;
+                } else {
+                    f->encodingMode = ICUMAPPING;
+                    f->conversionData = xstrdup(name);
+                }
+#endif
                 free(name);
             }
             break;
@@ -185,7 +211,11 @@ conversion_error(int errcode)
 {
     begin_diagnostic();
     print_nl('U');
+#ifdef TECTONIC_XETEX_ENABLE_ICU
     print_c_string("nicode conversion failed (ICU error code = ");
+#else
+    print_c_string("nicode conversion failed (browser decoder error code = ");
+#endif
     print_int(errcode);
     print_c_string(") discarding any remaining text");
     end_diagnostic(1);
@@ -233,9 +263,11 @@ input_line(UFILE* f)
 
     if (f->encodingMode == ICUMAPPING) {
         uint32_t bytesRead = 0;
+#ifdef TECTONIC_XETEX_ENABLE_ICU
         UConverter* cnv;
         int outLen;
         UErrorCode errorCode = U_ZERO_ERROR;
+#endif
 
         if (byteBuffer == NULL)
             byteBuffer = xmalloc(buf_size + 1);
@@ -261,6 +293,7 @@ input_line(UFILE* f)
             buffer_overflow();
 
         /* now apply the mapping to turn external bytes into Unicode characters in buffer */
+#ifdef TECTONIC_XETEX_ENABLE_ICU
         cnv = (UConverter*)(f->conversionData);
         switch (norm) {
             case 1: // NFC
@@ -289,6 +322,37 @@ input_line(UFILE* f)
                 last = first + outLen;
                 break;
         }
+#else
+        if (norm == 1 || norm == 2) {
+            if (utf32Buf == NULL)
+                utf32Buf = xcalloc(buf_size, sizeof(uint32_t));
+            tmpLen = tt_xetex_browser_decode(
+                (const char *) f->conversionData,
+                byteBuffer,
+                bytesRead,
+                utf32Buf,
+                buf_size
+            );
+            if (tmpLen < 0) {
+                conversion_error(tmpLen);
+                return false;
+            }
+            apply_normalization(utf32Buf, tmpLen, norm);
+        } else {
+            tmpLen = tt_xetex_browser_decode(
+                (const char *) f->conversionData,
+                byteBuffer,
+                bytesRead,
+                (uint32_t *) &buffer[first],
+                buf_size - first
+            );
+            if (tmpLen < 0) {
+                conversion_error(tmpLen);
+                return false;
+            }
+            last = first + tmpLen;
+        }
+#endif
     } else {
         /* Recognize either LF or CR as a line terminator; skip initial LF if prev line ended with CR.  */
         i = get_uni_c(f);
@@ -363,8 +427,13 @@ u_close(UFILE* f)
 
     ttstub_input_close (f->handle);
 
-    if (f->encodingMode == ICUMAPPING && f->conversionData != NULL)
+    if (f->encodingMode == ICUMAPPING && f->conversionData != NULL) {
+#ifdef TECTONIC_XETEX_ENABLE_ICU
         ucnv_close ((UConverter*) f->conversionData);
+#else
+        free(f->conversionData);
+#endif
+    }
 
     free (f);
 }

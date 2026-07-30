@@ -9,8 +9,18 @@
 #include "tectonic_bridge_core.h"
 
 /* ICU */
+#ifdef TECTONIC_XETEX_ENABLE_ICU
 #include <unicode/utypes.h>
 #include <unicode/platform.h> // defines U_IS_BIG_ENDIAN for us
+#endif
+
+#ifndef U_IS_BIG_ENDIAN
+#ifdef WORDS_BIGENDIAN
+#define U_IS_BIG_ENDIAN 1
+#else
+#define U_IS_BIG_ENDIAN 0
+#endif
+#endif
 
 /* fontconfig */
 #if !defined(XETEX_MAC) && !defined(__wasm__)
@@ -27,12 +37,16 @@
 #define US_NATIVE_UTF16 UTF16BE
 #define UTF16_NATIVE kForm_UTF16BE
 #define NATIVE_UTF32 kForm_UTF32BE
+#ifdef TECTONIC_XETEX_ENABLE_ICU
 #define UCNV_UTF32_NativeEndian UCNV_UTF32_BigEndian
+#endif
 #else
 #define US_NATIVE_UTF16 UTF16LE
 #define UTF16_NATIVE kForm_UTF16LE
 #define NATIVE_UTF32 kForm_UTF32LE
+#ifdef TECTONIC_XETEX_ENABLE_ICU
 #define UCNV_UTF32_NativeEndian UCNV_UTF32_LittleEndian
+#endif
 #endif
 
 /* our typedefs */

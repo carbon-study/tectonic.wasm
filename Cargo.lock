@@ -3512,7 +3512,6 @@ dependencies = [
  "tectonic_bridge_freetype2",
  "tectonic_bridge_graphite2",
  "tectonic_bridge_harfbuzz",
- "tectonic_bridge_icu",
  "tectonic_cfg_support",
  "tectonic_io_base",
  "tectonic_mac_core",
