@@ -29,7 +29,7 @@ tectonic_bridge_graphite2 = { path = "../bridge_graphite2", version = "0.0.0-dev
 tectonic_bridge_harfbuzz = { path = "../bridge_harfbuzz", version = "0.0.0-dev.0" }
 tectonic_bridge_icu = { path = "../bridge_icu", version = "0.0.0-dev.0" }
 tectonic_errors = { path = "../errors", version = "0.0.0-dev.0" }
-tectonic_pdf_io = { path = "../pdf_io", version = "0.0.0-dev.0" }
+tectonic_pdf_io = { path = "../pdf_io", version = "0.0.0-dev.0", optional = true }
 tectonic_xetex_layout = { path = "../xetex_layout", version = "0.0.0-dev.0" }
 
 [build-dependencies]
@@ -37,6 +37,10 @@ cc = "^1.0.66"
 tectonic_cfg_support = { path = "../cfg_support", version = "0.0.0-dev.0" }
 
 [features]
+default = ["image-formats"]
+
+image-formats = ["dep:tectonic_pdf_io"]
+
 external-harfbuzz = [
     "tectonic_bridge_harfbuzz/external-harfbuzz",
     "tectonic_xetex_layout/external-harfbuzz",

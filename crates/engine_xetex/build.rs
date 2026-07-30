@@ -13,7 +13,6 @@ fn main() {
     // Include paths exported by our internal dependencies.
 
     let xetex_layout_include_path = env::var("DEP_TECTONIC_XETEX_LAYOUT_INCLUDE_PATH").unwrap();
-    let pdfio_include_path = env::var("DEP_TECTONIC_PDF_IO_INCLUDE_PATH").unwrap();
     let core_include_dir = env::var("DEP_TECTONIC_BRIDGE_CORE_INCLUDE").unwrap();
     let flate_include_dir = env::var("DEP_TECTONIC_BRIDGE_FLATE_INCLUDE").unwrap();
     let graphite2_include_path = env::var("DEP_GRAPHITE2_INCLUDE_PATH").unwrap();
@@ -69,9 +68,11 @@ fn main() {
         cxx_cfg.include(item);
     }
 
-    for item in pdfio_include_path.split(';') {
-        c_cfg.include(item);
-        cxx_cfg.include(item);
+    if let Ok(pdfio_include_path) = env::var("DEP_TECTONIC_PDF_IO_INCLUDE_PATH") {
+        for item in pdfio_include_path.split(';') {
+            c_cfg.include(item);
+            cxx_cfg.include(item);
+        }
     }
 
     for item in harfbuzz_include_path.split(';') {
@@ -106,6 +107,13 @@ fn main() {
         cxx_cfg.define("GRAPHITE2_STATIC", "1");
     }
 
+    #[allow(unexpected_cfgs)]
+    const IMAGE_FORMATS_ENABLED: bool = cfg!(feature = "image-formats");
+
+    if IMAGE_FORMATS_ENABLED {
+        c_cfg.define("TECTONIC_XETEX_ENABLE_IMAGE_FORMATS", "1");
+    }
+
     // Platform-specific adjustments:
 
     let is_mac_os = target_cfg!(target_os = "macos");
@@ -138,6 +146,11 @@ fn main() {
 
     for file in C_FILES {
         c_cfg.file(file);
+    }
+    if IMAGE_FORMATS_ENABLED {
+        c_cfg.file("xetex/xetex-pic.c");
+    } else {
+        c_cfg.file("xetex/xetex-pic-disabled.c");
     }
 
     for file in CXX_FILES {
@@ -205,7 +218,6 @@ const C_FILES: &[&str] = &[
     "xetex/xetex-math.c",
     "xetex/xetex-output.c",
     "xetex/xetex-pagebuilder.c",
-    "xetex/xetex-pic.c",
     "xetex/xetex-scaledmath.c",
     "xetex/xetex-shipout.c",
     "xetex/xetex-stringpool.c",

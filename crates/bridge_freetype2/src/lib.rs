@@ -22,6 +22,7 @@ mod sys;
 mod linkage {
     #[allow(unused_imports)]
     use tectonic_bridge_flate as clippyrenamehack1;
+    #[cfg(not(target_family = "wasm"))]
     #[allow(unused_imports)]
     use tectonic_bridge_png as clippyrenamehack2;
 }

@@ -13,7 +13,9 @@
 #include "xetex-core.h"
 #include "xetex-xetexd.h"
 #include "xetex-synctex.h"
+#ifdef TECTONIC_XETEX_ENABLE_IMAGE_FORMATS
 #include "dpx-pdfobj.h" /* pdf_files_{init,close} */
+#endif
 #include "xetex_bindings.h" /* FORMAT_SERIAL */
 
 /* All the following variables are declared in xetex-xetexd.h */
@@ -3470,7 +3472,9 @@ tt_cleanup(void) {
         it would result in a segfault.
     */
 
+#ifdef TECTONIC_XETEX_ENABLE_IMAGE_FORMATS
     pdf_files_close();
+#endif
     free(TEX_format_default);
     free(font_used);
     deinitialize_shipout_variables();
@@ -3867,7 +3871,9 @@ tt_run_engine(const char *dump_name, const char *input_file_name, time_t build_d
     if (semantic_pagination_enabled)
         INTPAR(xetex_generate_actual_text) = 1;
 
+#ifdef TECTONIC_XETEX_ENABLE_IMAGE_FORMATS
     pdf_files_init();
+#endif
     synctex_init_command();
     start_input(input_file_name);
     history = HISTORY_SPOTLESS;
