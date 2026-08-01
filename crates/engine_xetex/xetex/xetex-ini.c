@@ -18,6 +18,11 @@
 #endif
 #include "xetex_bindings.h" /* FORMAT_SERIAL */
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten/heap.h>
+#include <malloc.h>
+#endif
+
 static tt_xetex_profile_t tt_xetex_last_profile;
 static uint64_t tt_profile_main_control_start_us;
 static uint64_t tt_profile_body_start_us;
@@ -35,6 +40,61 @@ tt_profile_now_us(void)
 
     get_seconds_and_micros(&seconds, &micros);
     return ((uint64_t) (uint32_t) seconds * 1000000) + (uint32_t) micros;
+}
+
+static void
+tt_profile_heap_snapshot(uint64_t *capacity, uint64_t *live, uint64_t *free_bytes, uint64_t *arena)
+{
+#ifdef __EMSCRIPTEN__
+    struct mallinfo info = mallinfo();
+
+    *capacity = emscripten_get_heap_size();
+    *live = (uint32_t) info.uordblks;
+    *free_bytes = (uint32_t) info.fordblks;
+    *arena = (uint32_t) info.arena;
+#else
+    *capacity = 0;
+    *live = 0;
+    *free_bytes = 0;
+    *arena = 0;
+#endif
+}
+
+void
+tt_xetex_profile_font_load_begin(void)
+{
+    if (tt_xetex_last_profile.heap_capacity_before_first_font == 0) {
+        tt_profile_heap_snapshot(
+            &tt_xetex_last_profile.heap_capacity_before_first_font,
+            &tt_xetex_last_profile.heap_live_before_first_font,
+            &tt_xetex_last_profile.heap_free_before_first_font,
+            &tt_xetex_last_profile.heap_arena_before_first_font);
+    }
+}
+
+void
+tt_xetex_profile_font_load_end(bool loaded)
+{
+    if (!loaded)
+        return;
+
+    tt_xetex_last_profile.loaded_font_count++;
+    tt_profile_heap_snapshot(
+        &tt_xetex_last_profile.heap_capacity_after_latest_font,
+        &tt_xetex_last_profile.heap_live_after_latest_font,
+        &tt_xetex_last_profile.heap_free_after_latest_font,
+        &tt_xetex_last_profile.heap_arena_after_latest_font);
+
+    if (tt_xetex_last_profile.loaded_font_count == 1) {
+        tt_xetex_last_profile.heap_capacity_after_first_font =
+            tt_xetex_last_profile.heap_capacity_after_latest_font;
+        tt_xetex_last_profile.heap_live_after_first_font =
+            tt_xetex_last_profile.heap_live_after_latest_font;
+        tt_xetex_last_profile.heap_free_after_first_font =
+            tt_xetex_last_profile.heap_free_after_latest_font;
+        tt_xetex_last_profile.heap_arena_after_first_font =
+            tt_xetex_last_profile.heap_arena_after_latest_font;
+    }
 }
 
 void

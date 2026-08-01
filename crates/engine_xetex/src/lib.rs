@@ -259,8 +259,21 @@ pub mod c_api {
         pub close_files_us: u64,
         pub cleanup_us: u64,
         pub total_us: u64,
+        pub heap_capacity_before_first_font: u64,
+        pub heap_live_before_first_font: u64,
+        pub heap_free_before_first_font: u64,
+        pub heap_arena_before_first_font: u64,
+        pub heap_capacity_after_first_font: u64,
+        pub heap_live_after_first_font: u64,
+        pub heap_free_after_first_font: u64,
+        pub heap_arena_after_first_font: u64,
+        pub heap_capacity_after_latest_font: u64,
+        pub heap_live_after_latest_font: u64,
+        pub heap_free_after_latest_font: u64,
+        pub heap_arena_after_latest_font: u64,
         pub checkpoint_count: u32,
         pub resident_resume: u32,
+        pub loaded_font_count: u32,
     }
 
     #[allow(improper_ctypes)] // for CoreBridgeState

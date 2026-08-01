@@ -34,8 +34,21 @@ typedef struct tt_xetex_profile_t {
   uint64_t close_files_us;
   uint64_t cleanup_us;
   uint64_t total_us;
+  uint64_t heap_capacity_before_first_font;
+  uint64_t heap_live_before_first_font;
+  uint64_t heap_free_before_first_font;
+  uint64_t heap_arena_before_first_font;
+  uint64_t heap_capacity_after_first_font;
+  uint64_t heap_live_after_first_font;
+  uint64_t heap_free_after_first_font;
+  uint64_t heap_arena_after_first_font;
+  uint64_t heap_capacity_after_latest_font;
+  uint64_t heap_live_after_latest_font;
+  uint64_t heap_free_after_latest_font;
+  uint64_t heap_arena_after_latest_font;
   uint32_t checkpoint_count;
   uint32_t resident_resume;
+  uint32_t loaded_font_count;
 } tt_xetex_profile_t;
 
 extern int tt_xetex_set_int_variable(const char *var_name, int value);

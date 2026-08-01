@@ -335,6 +335,25 @@ struct LifecycleProfile {
     total_ms: f64,
     checkpoint_count: u32,
     resident_resume: bool,
+    font_memory: FontMemoryProfile,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct FontMemoryProfile {
+    loaded_font_count: u32,
+    before_first_font: HeapSnapshot,
+    after_first_font: HeapSnapshot,
+    after_latest_font: HeapSnapshot,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct HeapSnapshot {
+    capacity_bytes: u64,
+    live_bytes: u64,
+    free_bytes: u64,
+    arena_bytes: u64,
 }
 
 impl From<c_api::XeTeXProfile> for LifecycleProfile {
@@ -354,6 +373,27 @@ impl From<c_api::XeTeXProfile> for LifecycleProfile {
             total_ms: millis(profile.total_us),
             checkpoint_count: profile.checkpoint_count,
             resident_resume: profile.resident_resume != 0,
+            font_memory: FontMemoryProfile {
+                loaded_font_count: profile.loaded_font_count,
+                before_first_font: HeapSnapshot {
+                    capacity_bytes: profile.heap_capacity_before_first_font,
+                    live_bytes: profile.heap_live_before_first_font,
+                    free_bytes: profile.heap_free_before_first_font,
+                    arena_bytes: profile.heap_arena_before_first_font,
+                },
+                after_first_font: HeapSnapshot {
+                    capacity_bytes: profile.heap_capacity_after_first_font,
+                    live_bytes: profile.heap_live_after_first_font,
+                    free_bytes: profile.heap_free_after_first_font,
+                    arena_bytes: profile.heap_arena_after_first_font,
+                },
+                after_latest_font: HeapSnapshot {
+                    capacity_bytes: profile.heap_capacity_after_latest_font,
+                    live_bytes: profile.heap_live_after_latest_font,
+                    free_bytes: profile.heap_free_after_latest_font,
+                    arena_bytes: profile.heap_arena_after_latest_font,
+                },
+            },
         }
     }
 }

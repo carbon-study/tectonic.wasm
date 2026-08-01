@@ -11574,6 +11574,8 @@ read_font_info(int32_t u, str_number nom, str_number aire, scaled_t s)
     unsigned char beta;
     rust_input_handle_t tfm_file;
 
+    tt_xetex_profile_font_load_begin();
+
     g = FONT_BASE;
 
     file_opened = false;
@@ -12017,6 +12019,7 @@ done:
         }
     }
 
+    tt_xetex_profile_font_load_end(g != FONT_BASE);
     return g;
 }
 
