@@ -16596,6 +16596,10 @@ void do_extension(void)
         }
         break;
 
+    case TECTONIC_PROFILE_CHECKPOINT_CODE:
+        tt_xetex_profile_checkpoint();
+        break;
+
     default:
         confusion("ext1");
         break;

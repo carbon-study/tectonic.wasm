@@ -18,6 +18,55 @@
 #endif
 #include "xetex_bindings.h" /* FORMAT_SERIAL */
 
+static tt_xetex_profile_t tt_xetex_last_profile;
+static uint64_t tt_profile_main_control_start_us;
+static uint64_t tt_profile_body_start_us;
+static uint64_t tt_profile_resident_start_us;
+
+#ifdef __EMSCRIPTEN__
+extern int tectonic_asyncify_checkpoint(void);
+#endif
+
+static uint64_t
+tt_profile_now_us(void)
+{
+    int32_t seconds;
+    int32_t micros;
+
+    get_seconds_and_micros(&seconds, &micros);
+    return ((uint64_t) (uint32_t) seconds * 1000000) + (uint32_t) micros;
+}
+
+void
+tt_xetex_profile_checkpoint(void)
+{
+    uint64_t now = tt_profile_now_us();
+
+    tt_xetex_last_profile.checkpoint_count++;
+    if (tt_xetex_last_profile.checkpoint_count == 1) {
+        tt_xetex_last_profile.preamble_us = now - tt_profile_main_control_start_us;
+#ifdef __EMSCRIPTEN__
+        if (resident_checkpoint_enabled && tectonic_asyncify_checkpoint() != 0) {
+            tt_xetex_last_profile.setup_before_format_us = 0;
+            tt_xetex_last_profile.format_load_us = 0;
+            tt_xetex_last_profile.post_format_setup_us = 0;
+            tt_xetex_last_profile.start_input_us = 0;
+            tt_xetex_last_profile.preamble_us = 0;
+            tt_xetex_last_profile.resident_resume = 1;
+            tt_profile_resident_start_us = tt_profile_now_us();
+        }
+#endif
+        tt_profile_body_start_us = tt_profile_now_us();
+    }
+}
+
+void
+tt_xetex_get_last_profile(tt_xetex_profile_t *profile)
+{
+    if (profile != NULL)
+        *profile = tt_xetex_last_profile;
+}
+
 /* All the following variables are declared in xetex-xetexd.h */
 bool shell_escape_enabled = false;
 memory_word *eqtb;
@@ -31,6 +80,7 @@ int32_t first;
 int32_t last;
 int32_t max_buf_stack;
 bool in_initex_mode;
+bool resident_checkpoint_enabled = false;
 int32_t error_line;
 int32_t half_error_line;
 int32_t max_print_line;
@@ -3564,6 +3614,10 @@ tt_history_t
 tt_run_engine(const char *dump_name, const char *input_file_name, time_t build_date)
 {
     int32_t font_k;
+    uint64_t profile_start = tt_profile_now_us();
+    uint64_t profile_mark;
+
+    memset(&tt_xetex_last_profile, 0, sizeof(tt_xetex_last_profile));
 
     /* Miscellaneous initializations that were mostly originally done in the
      * main() driver routines. */
@@ -3759,9 +3813,25 @@ tt_run_engine(const char *dump_name, const char *input_file_name, time_t build_d
 
     no_new_control_sequence = true;
 
+    profile_mark = tt_profile_now_us();
+    tt_xetex_last_profile.setup_before_format_us = profile_mark - profile_start;
+
     if (!in_initex_mode) {
-        if (!load_fmt_file())
+        uint64_t format_start = profile_mark;
+        if (!load_fmt_file()) {
+            profile_mark = tt_profile_now_us();
+            tt_xetex_last_profile.format_load_us = profile_mark - format_start;
+            tt_xetex_last_profile.total_us = profile_mark - profile_start;
             return history;
+        }
+        profile_mark = tt_profile_now_us();
+        tt_xetex_last_profile.format_load_us = profile_mark - format_start;
+
+        /* This no-op primitive gives browser benchmarks an exact, engine-side
+         * boundary between a fixed preamble and the editable document body. */
+        no_new_control_sequence = false;
+        primitive("tectonicprofilecheckpoint", EXTENSION, TECTONIC_PROFILE_CHECKPOINT_CODE);
+        no_new_control_sequence = true;
     }
 
     if (INTPAR(end_line_char) < 0 || INTPAR(end_line_char) > BIGGEST_CHAR)
@@ -3875,13 +3945,54 @@ tt_run_engine(const char *dump_name, const char *input_file_name, time_t build_d
     pdf_files_init();
 #endif
     synctex_init_command();
+    {
+        uint64_t now = tt_profile_now_us();
+        tt_xetex_last_profile.post_format_setup_us = now - profile_mark;
+        profile_mark = now;
+    }
     start_input(input_file_name);
+    {
+        uint64_t now = tt_profile_now_us();
+        tt_xetex_last_profile.start_input_us = now - profile_mark;
+        profile_mark = now;
+    }
     history = HISTORY_SPOTLESS;
+    tt_profile_main_control_start_us = profile_mark;
+    tt_profile_body_start_us = 0;
     main_control();
+    {
+        uint64_t now = tt_profile_now_us();
+        tt_xetex_last_profile.main_control_us = tt_xetex_last_profile.resident_resume
+            ? now - tt_profile_resident_start_us
+            : now - profile_mark;
+        if (tt_xetex_last_profile.checkpoint_count > 0)
+            tt_xetex_last_profile.body_us = now - tt_profile_body_start_us;
+        else
+            tt_xetex_last_profile.body_us = tt_xetex_last_profile.main_control_us;
+        profile_mark = now;
+    }
     final_cleanup();
+    {
+        uint64_t now = tt_profile_now_us();
+        tt_xetex_last_profile.final_cleanup_us = now - profile_mark;
+        profile_mark = now;
+    }
     close_files_and_terminate();
+    {
+        uint64_t now = tt_profile_now_us();
+        tt_xetex_last_profile.close_files_us = now - profile_mark;
+        profile_mark = now;
+    }
 
     tt_cleanup();
+
+    {
+        uint64_t now = tt_profile_now_us();
+        tt_xetex_last_profile.cleanup_us = now - profile_mark;
+        tt_xetex_last_profile.total_us = tt_xetex_last_profile.resident_resume
+            ? now - tt_profile_resident_start_us
+            : now - profile_start;
+    }
 
     return history;
 }

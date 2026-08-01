@@ -79,6 +79,7 @@ pub struct TexEngine {
     // though, it's just a proxy for the global constants in the C code.
     halt_on_error: bool,
     initex_mode: bool,
+    resident_checkpoint_enabled: bool,
     synctex_enabled: bool,
     semantic_pagination_enabled: bool,
     shell_escape_enabled: bool,
@@ -90,6 +91,7 @@ impl Default for TexEngine {
         TexEngine {
             halt_on_error: true,
             initex_mode: false,
+            resident_checkpoint_enabled: false,
             synctex_enabled: false,
             semantic_pagination_enabled: false,
             shell_escape_enabled: false,
@@ -114,6 +116,13 @@ impl TexEngine {
     /// document. The default is false.
     pub fn initex_mode(&mut self, initex: bool) -> &mut Self {
         self.initex_mode = initex;
+        self
+    }
+
+    /// Enable the experimental browser checkpoint at
+    /// `\\tectonicprofilecheckpoint`.
+    pub fn resident_checkpoint_mode(&mut self, enabled: bool) -> &mut Self {
+        self.resident_checkpoint_enabled = enabled;
         self
     }
 
@@ -198,6 +207,10 @@ impl TexEngine {
                 );
                 tt_xetex_set_int_variable(c"halt_on_error_p".as_ptr(), self.halt_on_error.into());
                 tt_xetex_set_int_variable(c"in_initex_mode".as_ptr(), self.initex_mode.into());
+                tt_xetex_set_int_variable(
+                    c"resident_checkpoint_enabled".as_ptr(),
+                    self.resident_checkpoint_enabled.into(),
+                );
                 tt_xetex_set_int_variable(c"synctex_enabled".as_ptr(), self.synctex_enabled.into());
                 tt_xetex_set_int_variable(
                     c"semantic_pagination_enabled".as_ptr(),
@@ -232,12 +245,32 @@ pub mod c_api {
 
     use tectonic_bridge_core::CoreBridgeState;
 
+    #[repr(C)]
+    #[derive(Clone, Copy, Debug, Default)]
+    pub struct XeTeXProfile {
+        pub setup_before_format_us: u64,
+        pub format_load_us: u64,
+        pub post_format_setup_us: u64,
+        pub start_input_us: u64,
+        pub main_control_us: u64,
+        pub preamble_us: u64,
+        pub body_us: u64,
+        pub final_cleanup_us: u64,
+        pub close_files_us: u64,
+        pub cleanup_us: u64,
+        pub total_us: u64,
+        pub checkpoint_count: u32,
+        pub resident_resume: u32,
+    }
+
     #[allow(improper_ctypes)] // for CoreBridgeState
     extern "C" {
         pub fn tt_xetex_set_int_variable(
             var_name: *const libc::c_char,
             value: libc::c_int,
         ) -> libc::c_int;
+
+        pub fn tt_xetex_get_last_profile(profile: *mut XeTeXProfile);
 
         pub fn tt_engine_xetex_main(
             api: &mut CoreBridgeState,

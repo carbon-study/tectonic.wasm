@@ -365,6 +365,7 @@ void getmd5sum(int32_t s, bool file);
 void init_start_time(time_t source_date_epoch);
 void get_date_and_time (time_t source_date_epoch, int32_t *minutes, int32_t *day, int32_t *month, int32_t *year);
 void get_seconds_and_micros (int32_t *seconds,  int32_t *micros);
+void tt_xetex_profile_checkpoint(void);
 
 void getcreationdate(void);
 void getfilemoddate(int32_t s);
@@ -394,6 +395,7 @@ extern int32_t first;
 extern int32_t last;
 extern int32_t max_buf_stack;
 extern bool in_initex_mode;
+extern bool resident_checkpoint_enabled;
 extern int32_t error_line;
 extern int32_t half_error_line;
 extern int32_t max_print_line;

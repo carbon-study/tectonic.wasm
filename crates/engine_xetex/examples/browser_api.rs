@@ -10,12 +10,15 @@ use std::{
     collections::HashMap,
     ffi::{CStr, CString},
     fmt::Arguments,
-    io::{self, Cursor, Write},
+    io::{self, Cursor, Read, Seek, SeekFrom, Write},
     ptr, slice, str,
-    sync::{Arc, Mutex},
+    sync::{
+        atomic::{AtomicBool, AtomicUsize, Ordering},
+        Arc, LazyLock, Mutex,
+    },
 };
 use tectonic_bridge_core::{CoreBridgeLauncher, MinimalDriver};
-use tectonic_engine_xetex::{TexEngine, TexOutcome};
+use tectonic_engine_xetex::{c_api, TexEngine, TexOutcome};
 use tectonic_errors::Error;
 use tectonic_io_base::{InputHandle, InputOrigin, IoProvider, OpenResult, OutputHandle};
 use tectonic_status_base::{MessageKind, StatusBackend};
@@ -63,8 +66,45 @@ struct BrowserIo {
     outputs: SharedOutputs,
 }
 
+struct SharedCursor(Cursor<Arc<[u8]>>);
+
+impl Read for SharedCursor {
+    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+        self.0.read(buffer)
+    }
+}
+
+impl tectonic_io_base::InputFeatures for SharedCursor {
+    fn get_size(&mut self) -> tectonic_errors::Result<usize> {
+        Ok(self.0.get_ref().len())
+    }
+
+    fn try_seek(&mut self, position: SeekFrom) -> tectonic_errors::Result<u64> {
+        Ok(self.0.seek(position)?)
+    }
+}
+
+static FORMAT_CACHE: LazyLock<Mutex<HashMap<String, Arc<[u8]>>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+static FORMAT_CACHE_ENABLED: AtomicBool = AtomicBool::new(true);
+static FORMAT_CACHE_HITS: AtomicUsize = AtomicUsize::new(0);
+static FORMAT_CACHE_MISSES: AtomicUsize = AtomicUsize::new(0);
+
 impl BrowserIo {
     fn load(&mut self, name: &str, is_format: bool) -> OpenResult<InputHandle> {
+        if is_format && FORMAT_CACHE_ENABLED.load(Ordering::Relaxed) {
+            let cached = FORMAT_CACHE.lock().unwrap().get(name).cloned();
+            if let Some(bytes) = cached {
+                FORMAT_CACHE_HITS.fetch_add(1, Ordering::Relaxed);
+                return OpenResult::Ok(InputHandle::new_read_only(
+                    name,
+                    SharedCursor(Cursor::new(bytes)),
+                    InputOrigin::Other,
+                ));
+            }
+            FORMAT_CACHE_MISSES.fetch_add(1, Ordering::Relaxed);
+        }
+
         let c_name = match CString::new(name) {
             Ok(value) => value,
             Err(error) => return OpenResult::Err(error.into()),
@@ -102,11 +142,24 @@ impl BrowserIo {
                     bytes
                 };
 
-                OpenResult::Ok(InputHandle::new_read_only(
-                    name,
-                    Cursor::new(bytes),
-                    InputOrigin::Other,
-                ))
+                if is_format && FORMAT_CACHE_ENABLED.load(Ordering::Relaxed) {
+                    let shared: Arc<[u8]> = bytes.into();
+                    FORMAT_CACHE
+                        .lock()
+                        .unwrap()
+                        .insert(name.to_owned(), shared.clone());
+                    OpenResult::Ok(InputHandle::new_read_only(
+                        name,
+                        SharedCursor(Cursor::new(shared)),
+                        InputOrigin::Other,
+                    ))
+                } else {
+                    OpenResult::Ok(InputHandle::new_read_only(
+                        name,
+                        Cursor::new(bytes),
+                        InputOrigin::Other,
+                    ))
+                }
             }
             _ => OpenResult::Err(
                 io::Error::other(format!("async host load failed for {name}")).into(),
@@ -263,6 +316,52 @@ struct ResultMetadata {
     output_name: Option<String>,
     diagnostics: Vec<Diagnostic>,
     error: Option<String>,
+    lifecycle: LifecycleProfile,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LifecycleProfile {
+    setup_before_format_ms: f64,
+    format_load_ms: f64,
+    post_format_setup_ms: f64,
+    start_input_ms: f64,
+    main_control_ms: f64,
+    preamble_ms: f64,
+    body_ms: f64,
+    final_cleanup_ms: f64,
+    close_files_ms: f64,
+    cleanup_ms: f64,
+    total_ms: f64,
+    checkpoint_count: u32,
+    resident_resume: bool,
+}
+
+impl From<c_api::XeTeXProfile> for LifecycleProfile {
+    fn from(profile: c_api::XeTeXProfile) -> Self {
+        let millis = |micros| micros as f64 / 1000.0;
+        Self {
+            setup_before_format_ms: millis(profile.setup_before_format_us),
+            format_load_ms: millis(profile.format_load_us),
+            post_format_setup_ms: millis(profile.post_format_setup_us),
+            start_input_ms: millis(profile.start_input_us),
+            main_control_ms: millis(profile.main_control_us),
+            preamble_ms: millis(profile.preamble_us),
+            body_ms: millis(profile.body_us),
+            final_cleanup_ms: millis(profile.final_cleanup_us),
+            close_files_ms: millis(profile.close_files_us),
+            cleanup_ms: millis(profile.cleanup_us),
+            total_ms: millis(profile.total_us),
+            checkpoint_count: profile.checkpoint_count,
+            resident_resume: profile.resident_resume != 0,
+        }
+    }
+}
+
+fn latest_lifecycle_profile() -> LifecycleProfile {
+    let mut profile = c_api::XeTeXProfile::default();
+    unsafe { c_api::tt_xetex_get_last_profile(&mut profile) };
+    profile.into()
 }
 
 struct CompileResult {
@@ -291,6 +390,7 @@ impl CompileResult {
                 output_name: None,
                 diagnostics: Vec::new(),
                 error: Some(message.into()),
+                lifecycle: latest_lifecycle_profile(),
             },
             Vec::new(),
         )
@@ -304,6 +404,7 @@ fn compile(
     primary_name: String,
     format_name: String,
     fonts: Vec<BrowserFontRegistration>,
+    resident_checkpoint_enabled: bool,
 ) -> CompileResult {
     #[cfg(target_family = "wasm")]
     {
@@ -328,7 +429,9 @@ fn compile(
     let mut driver = MinimalDriver::new(io);
     let mut status = DiagnosticStatus::default();
     let mut launcher = CoreBridgeLauncher::new(&mut driver, &mut status);
-    let engine_result = TexEngine::default().process(&mut launcher, &format_name, &primary_name);
+    let engine_result = TexEngine::default()
+        .resident_checkpoint_mode(resident_checkpoint_enabled)
+        .process(&mut launcher, &format_name, &primary_name);
 
     let (outcome, engine_error) = match engine_result {
         Ok(TexOutcome::Spotless) => (Some("spotless"), None),
@@ -367,6 +470,7 @@ fn compile(
             output_name,
             diagnostics: status.diagnostics,
             error,
+            lifecycle: latest_lifecycle_profile(),
         },
         xdv,
     )
@@ -404,6 +508,7 @@ pub unsafe extern "C" fn tectonic_compile(
     input_name_pointer: *const libc::c_char,
     format_name_pointer: *const libc::c_char,
     fonts_json_pointer: *const libc::c_char,
+    resident_checkpoint_enabled: libc::c_int,
 ) -> libc::c_int {
     *LAST_RESULT.lock().unwrap() = None;
 
@@ -424,13 +529,58 @@ pub unsafe extern "C" fn tectonic_compile(
     })();
 
     let result = match arguments {
-        Ok((source, input_name, format_name, fonts)) => {
-            compile(source, input_name, format_name, fonts)
-        }
+        Ok((source, input_name, format_name, fonts)) => compile(
+            source,
+            input_name,
+            format_name,
+            fonts,
+            resident_checkpoint_enabled != 0,
+        ),
         Err(error) => CompileResult::failure(error),
     };
     *LAST_RESULT.lock().unwrap() = Some(result);
     0
+}
+
+/// Return the total number of format bytes retained by the browser engine.
+#[no_mangle]
+pub extern "C" fn tectonic_format_cache_bytes() -> usize {
+    FORMAT_CACHE
+        .lock()
+        .unwrap()
+        .values()
+        .map(|bytes| bytes.len())
+        .sum()
+}
+
+/// Return the number of format opens served from the in-WASM cache.
+#[no_mangle]
+pub extern "C" fn tectonic_format_cache_hits() -> usize {
+    FORMAT_CACHE_HITS.load(Ordering::Relaxed)
+}
+
+/// Return the number of format opens that crossed the host bridge.
+#[no_mangle]
+pub extern "C" fn tectonic_format_cache_misses() -> usize {
+    FORMAT_CACHE_MISSES.load(Ordering::Relaxed)
+}
+
+/// Drop retained format bytes, for example when switching distributions.
+#[no_mangle]
+pub extern "C" fn tectonic_clear_format_cache() {
+    FORMAT_CACHE.lock().unwrap().clear();
+    FORMAT_CACHE_HITS.store(0, Ordering::Relaxed);
+    FORMAT_CACHE_MISSES.store(0, Ordering::Relaxed);
+}
+
+/// Enable or disable retained format bytes. Disabling also clears the cache.
+#[no_mangle]
+pub extern "C" fn tectonic_set_format_cache_enabled(enabled: libc::c_int) {
+    let enabled = enabled != 0;
+    FORMAT_CACHE_ENABLED.store(enabled, Ordering::Relaxed);
+    if !enabled {
+        tectonic_clear_format_cache();
+    }
 }
 
 #[no_mangle]

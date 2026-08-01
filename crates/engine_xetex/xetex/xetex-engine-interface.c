@@ -6,6 +6,7 @@
 #include "xetex-core.h"
 #include "xetex-xetexd.h"
 #include "xetex-ext.h"
+#include "xetex_bindings.h"
 
 #include <string.h>
 
@@ -28,6 +29,8 @@ tt_xetex_set_int_variable (const char *var_name, int value)
         halt_on_error_p = value;
     else if (streq_ptr(var_name, "in_initex_mode"))
         in_initex_mode = (value != 0);
+    else if (streq_ptr(var_name, "resident_checkpoint_enabled"))
+        resident_checkpoint_enabled = (value != 0);
     else if (streq_ptr(var_name, "synctex_enabled"))
         synctex_enabled = (value != 0);
     else if (streq_ptr(var_name, "semantic_pagination_enabled"))

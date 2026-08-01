@@ -1,4 +1,11 @@
 addToLibrary({
+  tectonic_asyncify_checkpoint__async: 'auto',
+  tectonic_asyncify_checkpoint: async () => {
+    if (typeof globalThis.__tectonicCheckpoint !== 'function') {
+      throw new Error('Tectonic checkpoint handler is not installed');
+    }
+    return await globalThis.__tectonicCheckpoint();
+  },
   tectonic_asyncify_load__deps: ['$UTF8ToString', 'malloc'],
   tectonic_asyncify_load__async: 'auto',
   tectonic_asyncify_load: async (namePointer, isFormat, dataOut, lengthOut) => {

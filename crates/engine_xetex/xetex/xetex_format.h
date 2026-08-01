@@ -531,6 +531,7 @@
 #define XETEX_INPUT_ENCODING_EXTENSION_CODE 44 /* = 0x2c */
 #define XETEX_DEFAULT_ENCODING_EXTENSION_CODE 45 /* = 0x2d */
 #define XETEX_LINEBREAK_LOCALE_EXTENSION_CODE 46 /* = 0x2e */
+#define TECTONIC_PROFILE_CHECKPOINT_CODE 47 /* local resident-engine prototype */
 
 /* Subcommand codes for the FI_OR_ELSE command. */
 
