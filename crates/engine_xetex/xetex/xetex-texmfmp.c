@@ -101,11 +101,7 @@ getcreationdate(void)
     /* In e-pTeX, "init len => call init_start_time()" (as pdftexdir/utils.c)
        yields  unintentional output. */
 
-    if ((unsigned) (pool_ptr + len) >= (unsigned) (pool_size)) {
-        pool_ptr = pool_size;
-        /* error by str_toks that calls str_room(1) */
-        return;
-    }
+    tt_ensure_pool_capacity(pool_ptr + len + 1);
 
     for (i = 0; i < len; i++)
         str_pool[pool_ptr++] = (uint16_t)start_time_str[i];
@@ -167,10 +163,8 @@ getfilemoddate(str_number s)
   makepdftime(mtime, buf, /* utc= */true);
   text_len = strlen(buf);
 
-  if ((unsigned) (pool_ptr + text_len) >= (unsigned) pool_size) {
-    pool_ptr = pool_size;
-    /* error by str_toks that calls str_room(1) */
-  } else {
+  tt_ensure_pool_capacity(pool_ptr + text_len + 1);
+  {
     int i;
 
     for (i = 0; i < text_len; i++)
@@ -203,10 +197,8 @@ getfilesize(str_number s)
   check_nprintf(i, sizeof(buf));
   text_len = strlen(buf);
 
-  if ((unsigned) (pool_ptr + text_len) >= (unsigned) pool_size) {
-      pool_ptr = pool_size;
-      /* error by str_toks that calls str_room(1) */
-  } else {
+  tt_ensure_pool_capacity(pool_ptr + text_len + 1);
+  {
       int i;
 
       for (i = 0; i < text_len; i++)
@@ -226,11 +218,7 @@ void getfiledump(int32_t s, int offset, int length)
   if (length == 0)
     return; /* => evaluate to the empty string; intentional */
 
-  if (pool_ptr + 2 * length + 1 >= pool_size) {
-      /* not enough room to hold the result; trigger an error back in TeX: */
-      pool_ptr = pool_size;
-      return;
-  }
+  tt_ensure_pool_capacity(pool_ptr + 2 * length + 2);
 
   buffer = (unsigned char *) xmalloc(length + 1);
   if (buffer == NULL) {
@@ -265,8 +253,7 @@ void getfiledump(int32_t s, int offset, int length)
 static void
 checkpool_pointer (pool_pointer pool_ptr, size_t len)
 {
-    if (pool_ptr + len >= pool_size)
-        _tt_abort ("string pool overflow [%i bytes]", (int) pool_size);
+    tt_ensure_pool_capacity(pool_ptr + len + 1);
 }
 
 
@@ -403,8 +390,7 @@ make_src_special (str_number srcfilename, int lineno)
    */
   sprintf (buf, "src:%d ", lineno);
 
-  if (pool_ptr + strlen(buf) + strlen(filename) >= (size_t)pool_size)
-      _tt_abort ("string pool overflow");
+  tt_ensure_pool_capacity(pool_ptr + strlen(buf) + strlen(filename) + 1);
 
   s = buf;
   while (*s)
@@ -456,10 +442,7 @@ void getmd5sum(str_number s, bool file)
     if (ret)
         return;
 
-    if (pool_ptr + 2 * DIGEST_SIZE >= pool_size) {
-        /* error by str_toks that calls str_room(1) */
-        return;
-    }
+    tt_ensure_pool_capacity(pool_ptr + 2 * DIGEST_SIZE + 1);
 
     convertStringToHexString((char *) digest, outbuf, DIGEST_SIZE);
     for (i = 0; i < 2 * DIGEST_SIZE; i++)

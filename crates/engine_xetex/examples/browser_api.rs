@@ -109,7 +109,7 @@ impl BrowserIo {
             Ok(value) => value,
             Err(error) => return OpenResult::Err(error.into()),
         };
-        let mut data = ptr::null_mut();
+        let mut data: *mut u8 = ptr::null_mut();
         let mut len = 0usize;
 
         #[cfg(target_os = "emscripten")]
@@ -335,7 +335,29 @@ struct LifecycleProfile {
     total_ms: f64,
     checkpoint_count: u32,
     resident_resume: bool,
+    table_memory: TableMemoryProfile,
     font_memory: FontMemoryProfile,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct TableMemoryProfile {
+    at_entry: HeapSnapshot,
+    after_setup: HeapSnapshot,
+    after_format: HeapSnapshot,
+    pool_used: u32,
+    pool_capacity: u32,
+    strings_used: u32,
+    strings_capacity: u32,
+    font_info_used: u32,
+    font_info_capacity: u32,
+    pool_used_at_end: u32,
+    strings_used_at_end: u32,
+    font_info_used_at_end: u32,
+    eqtb_logical_pages: u32,
+    eqtb_interned_pages: u32,
+    eqtb_private_pages_after_format: u32,
+    eqtb_private_pages_at_end: u32,
 }
 
 #[derive(Serialize)]
@@ -373,6 +395,39 @@ impl From<c_api::XeTeXProfile> for LifecycleProfile {
             total_ms: millis(profile.total_us),
             checkpoint_count: profile.checkpoint_count,
             resident_resume: profile.resident_resume != 0,
+            table_memory: TableMemoryProfile {
+                at_entry: HeapSnapshot {
+                    capacity_bytes: profile.heap_capacity_at_entry,
+                    live_bytes: profile.heap_live_at_entry,
+                    free_bytes: profile.heap_free_at_entry,
+                    arena_bytes: profile.heap_arena_at_entry,
+                },
+                after_setup: HeapSnapshot {
+                    capacity_bytes: profile.heap_capacity_after_setup,
+                    live_bytes: profile.heap_live_after_setup,
+                    free_bytes: profile.heap_free_after_setup,
+                    arena_bytes: profile.heap_arena_after_setup,
+                },
+                after_format: HeapSnapshot {
+                    capacity_bytes: profile.heap_capacity_after_format,
+                    live_bytes: profile.heap_live_after_format,
+                    free_bytes: profile.heap_free_after_format,
+                    arena_bytes: profile.heap_arena_after_format,
+                },
+                pool_used: profile.pool_used_after_format,
+                pool_capacity: profile.pool_capacity_after_format,
+                strings_used: profile.strings_used_after_format,
+                strings_capacity: profile.strings_capacity_after_format,
+                font_info_used: profile.font_info_used_after_format,
+                font_info_capacity: profile.font_info_capacity_after_format,
+                pool_used_at_end: profile.pool_used_at_end,
+                strings_used_at_end: profile.strings_used_at_end,
+                font_info_used_at_end: profile.font_info_used_at_end,
+                eqtb_logical_pages: profile.eqtb_logical_pages,
+                eqtb_interned_pages: profile.eqtb_interned_pages,
+                eqtb_private_pages_after_format: profile.eqtb_private_pages_after_format,
+                eqtb_private_pages_at_end: profile.eqtb_private_pages_at_end,
+            },
             font_memory: FontMemoryProfile {
                 loaded_font_count: profile.loaded_font_count,
                 before_first_font: HeapSnapshot {

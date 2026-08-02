@@ -161,10 +161,9 @@ print_raw_char(UTF16_code s, bool incr_offset)
             trick_buf[tally % error_line] = s;
         break;
     case SELECTOR_NEW_STRING:
-        if (pool_ptr < pool_size) {
-            str_pool[pool_ptr] = s;
-            pool_ptr++;
-        }
+        tt_ensure_pool_capacity(pool_ptr + 1);
+        str_pool[pool_ptr] = s;
+        pool_ptr++;
         break;
     default:
         ttstub_output_putc(write_file[selector], s);
@@ -414,13 +413,13 @@ print_cs(int32_t p)
             print_char(p - 1);
     } else if (((p >= UNDEFINED_CONTROL_SEQUENCE) && (p <= EQTB_SIZE)) || (p > eqtb_top)) {
         print_esc_cstr("IMPOSSIBLE.");
-    } else if (hash[p].s1 >= str_ptr) {
+    } else if (HASH_ENTRY(p).s1 >= str_ptr) {
         print_esc_cstr("NONEXISTENT.");
     } else {
         if (p >= PRIM_EQTB_BASE && p < FROZEN_NULL_FONT)
             print_esc(prim[p - PRIM_EQTB_BASE].s1 - 1);
         else
-            print_esc(hash[p].s1);
+            print_esc(HASH_ENTRY(p).s1);
         print_char(' ');
     }
 }
@@ -441,7 +440,7 @@ sprint_cs(int32_t p)
     } else if (p >= PRIM_EQTB_BASE && p < FROZEN_NULL_FONT) {
         print_esc(prim[p - PRIM_EQTB_BASE].s1 - 1);
     } else {
-        print_esc(hash[p].s1);
+        print_esc(HASH_ENTRY(p).s1);
     }
 }
 

@@ -442,8 +442,7 @@ hlist_out(void)
                      * and p to the last." */
 
                     if (p != r) {
-                        if (pool_ptr + k > pool_size)
-                            overflow("pool size", pool_size - init_pool_ptr);
+                        tt_ensure_pool_capacity(pool_ptr + k);
 
                         k = 0;
                         q = r;
@@ -2080,11 +2079,11 @@ special_out(int32_t p)
     doing_special = true;
     old_setting = selector;
     selector = SELECTOR_NEW_STRING ;
-    show_token_list(mem[mem[p + 1].b32.s1].b32.s1, TEX_NULL, pool_size - pool_ptr);
+    show_token_list(mem[mem[p + 1].b32.s1].b32.s1, TEX_NULL,
+                    tt_pool_capacity_remaining());
     selector = old_setting;
 
-    if (pool_ptr + 1 > pool_size)
-        overflow("pool size", pool_size - init_pool_ptr);
+    tt_ensure_pool_capacity(pool_ptr + 1);
 
     if (cur_length() < 256) {
         dvi_out(XXX1);

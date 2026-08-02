@@ -386,7 +386,9 @@ void remember_source_info(str_number, int);
 
 /* All the following variables are defined in xetexini.c */
 extern bool shell_escape_enabled;
-extern memory_word *eqtb;
+memory_word *tt_eqtb_entry(int32_t index);
+bool tt_eqtb_is_allocated(void);
+#define EQTB_ENTRY(index) (*tt_eqtb_entry(index))
 extern int32_t bad;
 extern char *name_of_file;
 extern UTF16_code *name_of_file16;
@@ -483,7 +485,8 @@ extern int32_t max_nest_stack;
 extern list_state_record cur_list;
 extern short shown_mode;
 extern unsigned char old_setting;
-extern b32x2 *hash;
+b32x2 *tt_hash_entry(int32_t index);
+#define HASH_ENTRY(index) (*tt_hash_entry(index))
 extern int32_t hash_used;
 extern int32_t hash_extra;
 extern int32_t hash_top;
@@ -1177,6 +1180,10 @@ cur_length(void) {
 /* Tectonic related functions */
 void tt_cleanup(void);
 tt_history_t tt_run_engine(const char *dump_name, const char *input_file_name, time_t build_date);
+void tt_ensure_pool_capacity(int32_t required);
+void tt_ensure_string_capacity(int32_t required);
+void tt_ensure_font_info_capacity(int32_t required);
+int32_t tt_pool_capacity_remaining(void);
 
 void tt_insert_special(const char *ascii_text);
 

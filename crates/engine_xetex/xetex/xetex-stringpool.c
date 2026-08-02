@@ -29,6 +29,7 @@ load_pool_strings(int32_t spare_size)
         if (total_len >= spare_size)
             return 0;
 
+        tt_ensure_pool_capacity(pool_ptr + len);
         while (len-- > 0)
             str_pool[pool_ptr++] = *s++;
 
@@ -57,8 +58,7 @@ length(str_number s)
 str_number
 make_string(void)
 {
-    if (str_ptr == max_strings)
-        overflow("number of strings", max_strings - init_str_ptr);
+    tt_ensure_string_capacity(str_ptr + 1);
 
     str_ptr++;
     str_start[str_ptr - TOO_BIG_CHAR] = pool_ptr;
@@ -74,8 +74,7 @@ append_str(str_number s)
 
     i = length(s);
 
-    if (pool_ptr + i > pool_size)
-        overflow("pool size", pool_size - init_pool_ptr);
+    tt_ensure_pool_capacity(pool_ptr + i);
 
     j = str_start[s - 65536L];
 
